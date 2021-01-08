@@ -86,7 +86,7 @@ def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable) -> No
 
 
 class AudioPlayer:
-    ellips = ".."  # 3 dots 2 long
+    ellipsis_ = ".."  # 3 dots 2 long
     # EXPECTING 5, 3 Layout!
 
     def __init__(self, root: py_cui.PyCUI):
@@ -94,13 +94,13 @@ class AudioPlayer:
 
         self.audio_list = self.root_.add_scroll_menu("Files", 0, 0, column_span=3, row_span=3)
         self.meta_list = self.root_.add_scroll_menu("Meta", 0, 3, column_span=2, row_span=5)
-        self.progress_blk = self.root_.add_text_box("Info", 3, 0, column_span=3)
+        self.info_box = self.root_.add_text_box("Info", 3, 0, column_span=3)
         self.play_btn = self.root_.add_button("Play", 4, 0, command=self.play_cb)
         self.stop_btn = self.root_.add_button("Stop", 4, 1, command=self.stop_cb)
         self.reload_btn = self.root_.add_button("Reload", 4, 2, command=self.reload_cb)
-        self.audio_list.get
+
         # just for ease of clearing
-        self.clear_target = [self.audio_list, self.meta_list, self.progress_blk]
+        self.clear_target = [self.audio_list, self.meta_list, self.info_box]
 
         # add callback to update metadata on every redraw.
         add_callback_patch(self.audio_list, self.update_meta)
@@ -113,6 +113,13 @@ class AudioPlayer:
 
     # callback definitions
 
+    def write_info(self, text: str):
+        if text:
+            self.info_box.set_text(str(text))
+        else:
+            self.info_box.clear()
+            # Sometimes you just want to unify interfaces.
+
     def play_cb(self):
         if self.playing:
             self.stop_cb()
@@ -122,13 +129,18 @@ class AudioPlayer:
             play_track(self.abs_dir(self.current))
         except IndexError:
             self.playing = False
+        else:
+            self.write_info(f"Playing Now - {self.current}")
 
     def stop_cb(self):
         self.playing = False
         stop_track()
+        self.write_info("")
         # Just to provide consistency. Double-wrapped single line method, yes.
 
     def reload_cb(self):
+        self.stop_cb()
+
         # clear widgets
         for widget in self.clear_target:
             widget.clear()
@@ -141,10 +153,11 @@ class AudioPlayer:
             self.audio_list.add_item(f"{str(idx).center(digits)}| {fn}")
             # Actually there is *add_item_list* but I think this is more clean.
 
+        self.write_info(f"Found {len(self.files)} file(s).")
         self.update_meta()
 
     # TODO: add exception handling later
-    # TODO: fetch metadata area's physical size and put ellipsis accordingly.
+    # TODO: fetch metadata area's physical size and put line breaks accordingly.
     def update_meta(self):
         # clear meta first
         self.meta_list.clear()
@@ -156,10 +169,11 @@ class AudioPlayer:
             return
 
         # calculate average key length - in case it's too long. Maybe violation of KISS.
-        key_avg = sum(map(len, ordered.keys())) // len(ordered)
+        # +1 is mere offset.
+        key_avg = (sum(map(len, ordered.keys())) // len(ordered)) + 1
 
         for key, val in ((k, v) for k, v in ordered.items() if v):
-            formatted = key if len(key) <= key_avg else key[::key_avg - len(self.ellips)] + self.ellips
+            formatted = key if len(key) < key_avg else key[:key_avg - len(self.ellipsis_)] + self.ellipsis_
             self.meta_list.add_item(f"{formatted.ljust(key_avg)}: {val}")
 
         # redraw scroll_view
