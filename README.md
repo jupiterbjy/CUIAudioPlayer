@@ -3,7 +3,7 @@
 Just a tiny project to create a script that literally does its name.
 
 Current status:  
-![](demo_1.png)
+![](Demo/Demo.webp)
 
 ---
 ## Background
@@ -31,5 +31,14 @@ This impressive pre-stone-age program does whopping 4 actions:
 ## Planned features
 Will mark those if it's implemented.
 - [ ] Bare minimum audio player functions
+    - [ ] pause
+    - [x] highlight current
+    - [x] wrong file handling
+    - [ ] library navigation
+    - [ ] show progress
+    - [ ] Continues play
+    - [ ] Shuffle
 - [ ] Album art visualizing on some sort of ascii art.
 - [ ] lrc support
+- [ ] Show freq. map
+- [ ] favorites
