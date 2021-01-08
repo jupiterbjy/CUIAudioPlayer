@@ -139,16 +139,18 @@ class AudioPlayer:
     def play_cb(self):
         self.stop_cb()
 
+        selected_idx, selected_track = self.current
+
         try:
-            play_track(self.abs_dir(self.current[1]))
+            play_track(self.abs_dir(selected_track))
         except IndexError:
             return
         except RuntimeError as err:
             self.write_info(f"ERR: {str(err).split(':')[-1]}")
             return
 
-        self.write_info(f"Playing Now - {self.current[1]}")
-        self.mark_current_playing(self.current[0])
+        self.write_info(f"Playing Now - {selected_track}")
+        self.mark_current_playing(selected_idx)
         self.playing = True
 
     def stop_cb(self):
@@ -182,7 +184,6 @@ class AudioPlayer:
             # check source code of add_item_list, it uses str(list) for logging.
 
         self.write_info(f"Found {len(self.files)} file(s).")
-        self.update_meta()
         # TODO: maintain original item if possible, then move update_meta call to reload_cb.
 
     def reload_cb(self):
@@ -253,4 +254,7 @@ def draw_player():
 
 
 if __name__ == '__main__':
-    draw_player()
+    try:
+        draw_player()
+    finally:
+        sd.stop()
