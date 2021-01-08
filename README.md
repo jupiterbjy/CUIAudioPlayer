@@ -33,4 +33,3 @@ Will mark those if it's implemented.
 - [ ] Bare minimum audio player functions
 - [ ] Album art visualizing on some sort of ascii art.
 - [ ] lrc support
-- [ ]

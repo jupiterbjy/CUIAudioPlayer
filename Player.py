@@ -7,7 +7,9 @@ from tinytag import TinyTag
 from os import listdir
 from os.path import abspath, dirname, join
 from numpy import ndarray
-from typing import Callable
+from typing import Callable, Mapping, Generator, Iterable, Tuple, List
+
+from ColoramaWrapper import br_green
 
 import pretty_errors
 pretty_errors.activate()
@@ -16,6 +18,7 @@ pretty_errors.activate()
 # Assuming relative location
 AUDIO_FOLDER = "audio_files"
 AUDIO_TYPES = ".ogg", ".mp3", ".m4a", ".flac"
+VERSION_TAG = "0.0.1a"
 
 
 class Device:
@@ -81,6 +84,20 @@ def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable) -> No
         setattr(widget_, target, patch_factory(getattr(widget_, target)))
 
 
+def audio_list_str_gen(dict_: Mapping, ellipsis_: str = "..", offset: int = 1) -> Generator[str, None, None]:
+    """
+    Cuts text in avg. of given dict_'s keys.
+    :param dict_: Mapping containing metadata.
+    :param ellipsis_: Suffix to use as ellipsis, when text is longer than avg.
+    :param offset: Offset to add / reduce max displayed length from avg.
+    """
+    key_avg = (sum(map(len, dict_.keys())) // len(dict_)) + offset
+
+    for key, val in ((k, v) for k, v in dict_.items() if v):
+        formatted = key if len(key) < key_avg else key[:key_avg - len(ellipsis_)] + ellipsis_
+        yield f"{formatted.ljust(key_avg)}: {val}"
+
+
 # ------------------------------------------------------------------
 # UI definition, using py-cui examples. Would've been nice if it followed PEP8.
 
@@ -92,6 +109,7 @@ class AudioPlayer:
     def __init__(self, root: py_cui.PyCUI):
         self.root_ = root
 
+        # row-idx then col-idx, it's reversed x,y - reminder to self!
         self.audio_list = self.root_.add_scroll_menu("Files", 0, 0, column_span=3, row_span=3)
         self.meta_list = self.root_.add_scroll_menu("Meta", 0, 3, column_span=2, row_span=5)
         self.info_box = self.root_.add_text_box("Info", 3, 0, column_span=3)
@@ -108,35 +126,64 @@ class AudioPlayer:
         # Key binds
         self.play_btn.add_key_command(py_cui.keys.KEY_SPACE, self.play_cb)
 
-        self.files = []
+        # add color rules - might be better implementing custom coloring methods, someday.
+        # self.audio_list.add_text_color_rule(r"[0-9 ]►", py_cui.WHITE_ON_YELLOW, "startswith")
+        self.audio_list.add_text_color_rule(r"►", py_cui.WHITE_ON_YELLOW, "contains")
+        self.info_box.add_text_color_rule("ERR:", py_cui.WHITE_ON_RED, "startswith")
+
+        self.files: List[str] = []
         self.playing = False
 
     # callback definitions
 
-    def write_info(self, text: str):
-        if text:
-            self.info_box.set_text(str(text))
-        else:
-            self.info_box.clear()
-            # Sometimes you just want to unify interfaces.
-
     def play_cb(self):
-        if self.playing:
-            self.stop_cb()
+        self.stop_cb()
 
-        self.playing = True
         try:
-            play_track(self.abs_dir(self.current))
+            play_track(self.abs_dir(self.current[1]))
         except IndexError:
-            self.playing = False
-        else:
-            self.write_info(f"Playing Now - {self.current}")
+            return
+        except RuntimeError as err:
+            self.write_info(f"ERR: {str(err).split(':')[-1]}")
+            return
+
+        self.write_info(f"Playing Now - {self.current[1]}")
+        self.mark_current_playing(self.current[0])
+        self.playing = True
 
     def stop_cb(self):
+        if not self.playing:
+            return
+
         self.playing = False
         stop_track()
+
+        # store current idx
+        idx_last = self.audio_list.get_selected_item_index()
+
+        # revert texts
+        self.refresh_list(search_files=False)
         self.write_info("")
-        # Just to provide consistency. Double-wrapped single line method, yes.
+
+        # revert idx back
+        self.audio_list.set_selected_item_index(idx_last)
+
+    def refresh_list(self, search_files=True):
+        self.audio_list.clear()
+
+        if search_files:
+            self.files = fetch_files()
+
+        digits = len(str(len(self.files))) + 2
+
+        for idx, fn in enumerate(self.files):
+            self.audio_list.add_item(f"{str(idx).center(digits)}| {fn}")
+            # Actually there is *add_item_list* but I think this reduces memory spikes.
+            # check source code of add_item_list, it uses str(list) for logging.
+
+        self.write_info(f"Found {len(self.files)} file(s).")
+        self.update_meta()
+        # TODO: maintain original item if possible, then move update_meta call to reload_cb.
 
     def reload_cb(self):
         self.stop_cb()
@@ -145,56 +192,65 @@ class AudioPlayer:
         for widget in self.clear_target:
             widget.clear()
 
-        # fetch new file list
-        self.files = fetch_files()
-        digits = len(str(len(self.files))) + 2
+        self.refresh_list()
 
-        for idx, fn in enumerate(self.files):
-            self.audio_list.add_item(f"{str(idx).center(digits)}| {fn}")
-            # Actually there is *add_item_list* but I think this is more clean.
-
-        self.write_info(f"Found {len(self.files)} file(s).")
-        self.update_meta()
-
-    # TODO: add exception handling later
-    # TODO: fetch metadata area's physical size and put line breaks accordingly.
+    # TODO: fetch metadata area's physical size and put line breaks or text cycling accordingly.
     def update_meta(self):
         # clear meta first
         self.meta_list.clear()
 
         # Extract metadata
         try:
-            ordered = extract_metadata(self.abs_dir(self.current))
+            ordered = extract_metadata(self.abs_dir(self.current[1]))
         except IndexError:
             return
 
-        # calculate average key length - in case it's too long. Maybe violation of KISS.
-        # +1 is mere offset.
-        key_avg = (sum(map(len, ordered.keys())) // len(ordered)) + 1
+        self.write_meta_list(audio_list_str_gen(ordered))
 
-        for key, val in ((k, v) for k, v in ordered.items() if v):
-            formatted = key if len(key) < key_avg else key[:key_avg - len(self.ellipsis_)] + self.ellipsis_
-            self.meta_list.add_item(f"{formatted.ljust(key_avg)}: {val}")
+    # Wrappers
 
-        # redraw scroll_view
+    def write_info(self, text: str):
+        if text:
+            self.info_box.set_text(str(text))
+        else:
+            self.info_box.clear()
+            # Sometimes you just want to unify interfaces.
+
+    def write_meta_list(self, lines: Iterable):
+        self.meta_list.clear()
+        self.meta_list.add_item_list(lines)  # Might need to open a issue about false warnings.
+
+    # TODO: create branch to implement full-color support for py_cui.
+    def write_audio_list(self, lines: Iterable):
+        self.audio_list.clear()
+        for line in lines:
+            self.audio_list.add_item(line)
+
+    # Extra functions
+
+    def mark_current_playing(self, track_idx):
+        source = self.audio_list.get_item_list()
+        source[track_idx] = source[track_idx].replace("|", "►")
+        self.write_audio_list(source)
 
     @property
-    def current(self):
-        return self.files[self.audio_list.get_selected_item_index()]
+    def current(self) -> Tuple[int, str]:
+        idx = self.audio_list.get_selected_item_index()
+        return idx, self.files[idx]
 
     @staticmethod
     def abs_dir(file_name):
+        # noinspection PyUnresolvedReferences
         return join(fetch_files.cached_location, file_name)  # dirty trick
 
 
 def draw_player():
     root = py_cui.PyCUI(5, 5)
-    root.set_title("CUI Player")
-    player = AudioPlayer(root)
+    root.set_title(f"CUI Audio Player - v{VERSION_TAG}")
+    player_ref = AudioPlayer(root)
 
     root.start()
 
 
 if __name__ == '__main__':
-
     draw_player()
