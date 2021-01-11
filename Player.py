@@ -7,7 +7,7 @@ from tinytag import TinyTag
 from os import listdir
 from os.path import abspath, dirname, join
 from numpy import ndarray
-from typing import Callable, Mapping, Generator, Iterable, Tuple, List
+from typing import Callable, Mapping, Generator, Iterable, Tuple, List, Type
 
 from ColoramaWrapper import br_green
 
@@ -102,8 +102,12 @@ def audio_list_str_gen(dict_: Mapping, ellipsis_: str = "..", offset: int = 1) -
 # UI definition, using py-cui examples. Would've been nice if it followed PEP8.
 
 
+# TODO: detect sounddevice change and update accordingly
+# TODO: add unittest
+# TODO: audio finished event handling
 class AudioPlayer:
     ellipsis_ = ".."  # 3 dots 2 long
+    usable_offset_y, usable_offset_x = 2, 6  # Excl. Border, Spacing of widget from abs size.
     # EXPECTING 5, 3 Layout!
 
     def __init__(self, root: py_cui.PyCUI):
@@ -133,6 +137,8 @@ class AudioPlayer:
 
         self.files: List[str] = []
         self.playing = False
+
+        self.get_absolute_size(self.audio_list)
 
     # callback definitions
 
@@ -208,6 +214,7 @@ class AudioPlayer:
 
         self.write_meta_list(audio_list_str_gen(ordered))
 
+    # TODO: create branch to implement full-color support for py_cui.
     # Wrappers
 
     def write_info(self, text: str):
@@ -217,17 +224,23 @@ class AudioPlayer:
             self.info_box.clear()
             # Sometimes you just want to unify interfaces.
 
-    def write_meta_list(self, lines: Iterable):
-        self.meta_list.clear()
-        self.meta_list.add_item_list(lines)  # Might need to open a issue about false warnings.
-
-    # TODO: create branch to implement full-color support for py_cui.
-    def write_audio_list(self, lines: Iterable):
-        self.audio_list.clear()
+    def write_scroll_wrapped(self, lines: Iterable, widget: py_cui.widgets.ScrollMenu):
+        widget.clear()
+        _, usable_x = self.get_absolute_size(widget)
         for line in lines:
-            self.audio_list.add_item(line)
+            widget.add_item(line[:usable_x])
+
+    def write_meta_list(self, lines: Iterable):
+        self.write_scroll_wrapped(lines, self.meta_list)
+
+    def write_audio_list(self, lines: Iterable):
+        self.write_scroll_wrapped(lines, self.audio_list)
 
     # Extra functions
+
+    def get_absolute_size(self, widget:py_cui.widgets.Widget) -> Tuple[int, int]:
+        abs_y, abs_x = widget.get_absolute_dimensions()
+        return abs_y - self.usable_offset_y, abs_x - self.usable_offset_x
 
     def mark_current_playing(self, track_idx):
         source = self.audio_list.get_item_list()

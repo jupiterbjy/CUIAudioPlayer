@@ -1,0 +1,4 @@
+sounddevice>=0.4.1
+SoundFile>=0.10.3.post1
+tinytag>=1.5.0
+numpy>=1.19.5
