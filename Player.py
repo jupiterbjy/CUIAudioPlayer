@@ -4,12 +4,10 @@ import py_cui
 import functools
 from collections import OrderedDict
 from tinytag import TinyTag
+from wcwidth import wcswidth, wcwidth
 from os import listdir
 from os.path import abspath, dirname, join
-from numpy import ndarray
 from typing import Callable, Mapping, Generator, Iterable, Tuple, List, Type
-
-from ColoramaWrapper import br_green
 
 import pretty_errors
 pretty_errors.activate()
@@ -20,6 +18,9 @@ AUDIO_FOLDER = "audio_files"
 AUDIO_TYPES = ".ogg", ".mp3", ".m4a", ".flac"
 VERSION_TAG = "0.0.1a"
 
+# Really temporary logger to display AFTER UI close
+entry =[]
+
 
 class Device:
     # Singleton? is this correct?
@@ -28,12 +29,11 @@ class Device:
     channels: int = 2
 
 
-def play_track(file_name: str, blocking=False):
+def play_track(file_name: str) -> sd.OutputStream:
     data, fs = sf.read(file_name)
 
     sd.play(data, fs)
-    if blocking:
-        sd.wait()
+    return sd.get_stream()
 
 
 def stop_track():  # She's so smol
@@ -98,6 +98,33 @@ def audio_list_str_gen(dict_: Mapping, ellipsis_: str = "..", offset: int = 1) -
         yield f"{formatted.ljust(key_avg)}: {val}"
 
 
+def get_absolute_width(text: str, pad: str = "℅") -> Tuple[str, str]:
+    """
+    Determine real-displaying character length, and provide padding accordingly to match length.
+    This way slicing will cut asian letters properly, not breaking tidy layouts.
+    :return: padding character and padded string
+    """
+    real_length = wcswidth(text)
+    if real_length > len(text):
+        # assuming there is no length-reducing characters in it!
+        # if length differ, then use generator to add padding in each characters.
+        def padding_gen(source):
+            for ch in source:
+                length_ = wcwidth(ch)
+                if length_ in (-1, 0):
+                    raise UnicodeError()
+
+                yield (length_ - 1) * pad + ch
+
+        return pad, "".join(padding_gen(text))
+    return pad, text
+
+
+def fit_to_actual_width(text: str, length_lim: int) -> str:
+    padding, sawed_off = get_absolute_width(text)
+    return sawed_off[:length_lim].replace(padding, "")
+
+
 # ------------------------------------------------------------------
 # UI definition, using py-cui examples. Would've been nice if it followed PEP8.
 
@@ -148,7 +175,7 @@ class AudioPlayer:
         selected_idx, selected_track = self.current
 
         try:
-            play_track(self.abs_dir(selected_track))
+            stream = play_track(self.abs_dir(selected_track))
         except IndexError:
             return
         except RuntimeError as err:
@@ -158,6 +185,7 @@ class AudioPlayer:
         self.write_info(f"Playing Now - {selected_track}")
         self.mark_current_playing(selected_idx)
         self.playing = True
+        # stream.
 
     def stop_cb(self):
         if not self.playing:
@@ -184,10 +212,8 @@ class AudioPlayer:
 
         digits = len(str(len(self.files))) + 2
 
-        for idx, fn in enumerate(self.files):
-            self.audio_list.add_item(f"{str(idx).center(digits)}| {fn}")
-            # Actually there is *add_item_list* but I think this reduces memory spikes.
-            # check source code of add_item_list, it uses str(list) for logging.
+        lazy_line_gen = (f"{str(idx).center(digits)}| {fn}" for idx, fn in enumerate(self.files))
+        self.write_audio_list(lazy_line_gen)
 
         self.write_info(f"Found {len(self.files)} file(s).")
         # TODO: maintain original item if possible, then move update_meta call to reload_cb.
@@ -203,9 +229,6 @@ class AudioPlayer:
 
     # TODO: fetch metadata area's physical size and put line breaks or text cycling accordingly.
     def update_meta(self):
-        # clear meta first
-        self.meta_list.clear()
-
         # Extract metadata
         try:
             ordered = extract_metadata(self.abs_dir(self.current[1]))
@@ -224,11 +247,20 @@ class AudioPlayer:
             self.info_box.clear()
             # Sometimes you just want to unify interfaces.
 
+    # def fit_content_to_widget(self, line: any, widget: py_cui.widgets.Widget):
+    #     try:
+    #         widget.clear()
+    #     except AttributeError:
+    #         raise  # Will add handling later
+    #
+    #     _, usable_x = self.get_absolute_size(widget)
+    #     widget.
+
     def write_scroll_wrapped(self, lines: Iterable, widget: py_cui.widgets.ScrollMenu):
         widget.clear()
         _, usable_x = self.get_absolute_size(widget)
         for line in lines:
-            widget.add_item(line[:usable_x])
+            widget.add_item(fit_to_actual_width(line, usable_x))
 
     def write_meta_list(self, lines: Iterable):
         self.write_scroll_wrapped(lines, self.meta_list)
