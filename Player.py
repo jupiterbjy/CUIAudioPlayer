@@ -9,6 +9,7 @@ from os import listdir
 from os.path import abspath, dirname, join
 from typing import Callable, Mapping, Generator, Iterable, Tuple, List, Type
 
+import threading
 import pretty_errors
 pretty_errors.activate()
 
@@ -17,12 +18,6 @@ pretty_errors.activate()
 AUDIO_FOLDER = "audio_files"
 AUDIO_TYPES = ".ogg", ".mp3", ".m4a", ".flac"
 VERSION_TAG = "0.0.1a"
-WIN10_MODE = True
-WIN10_OFFSET = -3
-WIN10_BLACKLIST = "【】"
-# finally figured out, NONE of win10 consoles out there supports proper text buffers like linux's.
-# This is ONLY confirmed to run in terminal without this switch!
-# THIS WIN10 SWITCH WILL NOT FIX POWERSHELL!
 
 
 class Device:
@@ -109,9 +104,6 @@ def pad_actual_length(source: str, pad: str = "\u200b") -> Tuple[str, str]:
     """
     def inner_gen(source_: str) -> Generator[str, None, None]:
         for ch in source_:
-            if ch in WIN10_BLACKLIST:
-                yield ch
-                continue
             yield pad + ch if wcwidth(ch) == 2 else ch
 
     return pad, "".join(inner_gen(source))
@@ -119,8 +111,7 @@ def pad_actual_length(source: str, pad: str = "\u200b") -> Tuple[str, str]:
 
 def fit_to_actual_width(text: str, length_lim: int) -> str:
     padding, sawed_off = pad_actual_length(text)
-    # return sawed_off[:length_lim].replace(padding, "")
-    return sawed_off[:length_lim + (WIN10_OFFSET if WIN10_MODE else 0)].rstrip(padding)
+    return sawed_off[:length_lim].rstrip(padding)
 
 
 # ------------------------------------------------------------------
