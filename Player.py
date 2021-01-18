@@ -17,6 +17,12 @@ pretty_errors.activate()
 AUDIO_FOLDER = "audio_files"
 AUDIO_TYPES = ".ogg", ".mp3", ".m4a", ".flac"
 VERSION_TAG = "0.0.1a"
+WIN10_MODE = True
+WIN10_OFFSET = -3
+WIN10_BLACKLIST = "【】"
+# finally figured out, NONE of win10 consoles out there supports proper text buffers like linux's.
+# This is ONLY confirmed to run in terminal without this switch!
+# THIS WIN10 SWITCH WILL NOT FIX POWERSHELL!
 
 
 class Device:
@@ -95,33 +101,26 @@ def audio_list_str_gen(dict_: Mapping, ellipsis_: str = "..", offset: int = 1) -
         yield f"{formatted.ljust(key_avg)}: {val}"
 
 
-def get_absolute_width(text: str, pad: str = "\u200b") -> Tuple[str, str]:
+def pad_actual_length(source: str, pad: str = "\u200b") -> Tuple[str, str]:
     """
     Determine real-displaying character length, and provide padding accordingly to match length.
     This way slicing will cut asian letters properly, not breaking tidy layouts.
     :return: padding character and padded string
     """
-    real_length = wcswidth(text)
-    if real_length > len(text):
-        # assuming there is no length-reducing characters in it!
-        # if length differ, then use generator to add padding in each characters.
-        def padding_gen(source):
-            for ch in source:
-                length_ = wcwidth(ch)
-                if length_ in (-1, 0):
-                    raise UnicodeError()
+    def inner_gen(source_: str) -> Generator[str, None, None]:
+        for ch in source_:
+            if ch in WIN10_BLACKLIST:
+                yield ch
+                continue
+            yield pad + ch if wcwidth(ch) == 2 else ch
 
-                # Might be better using ```yield ch if length_ == 1 else pad + ch```? not sure.
-                yield (length_ - 1) * pad + ch
-
-        return pad, "".join(padding_gen(text))
-    return pad, text
+    return pad, "".join(inner_gen(source))
 
 
 def fit_to_actual_width(text: str, length_lim: int) -> str:
-    padding, sawed_off = get_absolute_width(text)
+    padding, sawed_off = pad_actual_length(text)
     # return sawed_off[:length_lim].replace(padding, "")
-    return sawed_off[:length_lim].rstrip(padding)
+    return sawed_off[:length_lim + (WIN10_OFFSET if WIN10_MODE else 0)].rstrip(padding)
 
 
 # ------------------------------------------------------------------
