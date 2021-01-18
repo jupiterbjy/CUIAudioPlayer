@@ -18,9 +18,6 @@ AUDIO_FOLDER = "audio_files"
 AUDIO_TYPES = ".ogg", ".mp3", ".m4a", ".flac"
 VERSION_TAG = "0.0.1a"
 
-# Really temporary logger to display AFTER UI close
-entry =[]
-
 
 class Device:
     # Singleton? is this correct?
@@ -98,7 +95,7 @@ def audio_list_str_gen(dict_: Mapping, ellipsis_: str = "..", offset: int = 1) -
         yield f"{formatted.ljust(key_avg)}: {val}"
 
 
-def get_absolute_width(text: str, pad: str = "℅") -> Tuple[str, str]:
+def get_absolute_width(text: str, pad: str = "\u200b") -> Tuple[str, str]:
     """
     Determine real-displaying character length, and provide padding accordingly to match length.
     This way slicing will cut asian letters properly, not breaking tidy layouts.
@@ -114,6 +111,7 @@ def get_absolute_width(text: str, pad: str = "℅") -> Tuple[str, str]:
                 if length_ in (-1, 0):
                     raise UnicodeError()
 
+                # Might be better using ```yield ch if length_ == 1 else pad + ch```? not sure.
                 yield (length_ - 1) * pad + ch
 
         return pad, "".join(padding_gen(text))
@@ -122,7 +120,8 @@ def get_absolute_width(text: str, pad: str = "℅") -> Tuple[str, str]:
 
 def fit_to_actual_width(text: str, length_lim: int) -> str:
     padding, sawed_off = get_absolute_width(text)
-    return sawed_off[:length_lim].replace(padding, "")
+    # return sawed_off[:length_lim].replace(padding, "")
+    return sawed_off[:length_lim].rstrip(padding)
 
 
 # ------------------------------------------------------------------
@@ -258,9 +257,10 @@ class AudioPlayer:
 
     def write_scroll_wrapped(self, lines: Iterable, widget: py_cui.widgets.ScrollMenu):
         widget.clear()
+        offset = -1
         _, usable_x = self.get_absolute_size(widget)
-        for line in lines:
-            widget.add_item(fit_to_actual_width(line, usable_x))
+        for line_ in lines:
+            widget.add_item(fit_to_actual_width(line_, usable_x + offset))
 
     def write_meta_list(self, lines: Iterable):
         self.write_scroll_wrapped(lines, self.meta_list)
@@ -270,7 +270,7 @@ class AudioPlayer:
 
     # Extra functions
 
-    def get_absolute_size(self, widget:py_cui.widgets.Widget) -> Tuple[int, int]:
+    def get_absolute_size(self, widget: py_cui.widgets.Widget) -> Tuple[int, int]:
         abs_y, abs_x = widget.get_absolute_dimensions()
         return abs_y - self.usable_offset_y, abs_x - self.usable_offset_x
 
@@ -302,4 +302,6 @@ if __name__ == '__main__':
     try:
         draw_player()
     finally:
+        for line in entry:
+            print(line)
         sd.stop()
