@@ -5,6 +5,7 @@ import functools
 from collections import OrderedDict
 from tinytag import TinyTag
 from wcwidth import wcswidth, wcwidth
+from sys import platform
 from os import listdir
 from os.path import abspath, dirname, join
 from typing import Callable, Mapping, Generator, Iterable, Tuple, List, Type
@@ -14,10 +15,12 @@ import pretty_errors
 pretty_errors.activate()
 
 
+# THIS WILL NOT RUN PROPERLY ON WINDOWS TERMINAL!
 # Assuming relative location
 AUDIO_FOLDER = "audio_files"
 AUDIO_TYPES = ".ogg", ".mp3", ".m4a", ".flac"
 VERSION_TAG = "0.0.1a"
+WINDOWS = platform == 'win32'
 
 
 class Device:
@@ -104,14 +107,23 @@ def pad_actual_length(source: str, pad: str = "\u200b") -> Tuple[str, str]:
     """
     def inner_gen(source_: str) -> Generator[str, None, None]:
         for ch in source_:
-            yield pad + ch if wcwidth(ch) == 2 else ch
+            yield ch + pad if wcwidth(ch) == 2 else ch
 
-    return pad, "".join(inner_gen(source))
+    return pad, "".join(inner_gen(source.replace(pad, "")))
+    # WHAT'S WRONG WITH POWERSHELL AND WINDOWS TERMINAL? IT'S BAD THAN CMD ABOUT CURSES!
+    # TOOK WEEKS TO FIGURE OUT THIS, GJ MS
 
 
+# TODO: add backward-compatibility patch to str for support ```.endswith()``` on start of script.
 def fit_to_actual_width(text: str, length_lim: int) -> str:
-    padding, sawed_off = pad_actual_length(text)
-    return sawed_off[:length_lim].rstrip(padding)
+
+    padding, padded = pad_actual_length(text)
+    limited = padded[:length_lim]
+    if wcwidth(limited[-1]) == 2:
+        # if so, last padding was wear off, so last 2-width character shouldn't be displayed.
+        limited = limited[:-1]
+
+    return limited.rstrip(padding)
 
 
 # ------------------------------------------------------------------
@@ -155,7 +167,6 @@ class AudioPlayer:
         self.playing = False
 
         self.get_absolute_size(self.audio_list)
-
     # callback definitions
 
     def play_cb(self):
@@ -231,19 +242,12 @@ class AudioPlayer:
 
     def write_info(self, text: str):
         if text:
-            self.info_box.set_text(str(text))
+            # Will have hard time to implement cycling texts.
+            fit_text = fit_to_actual_width(str(text), self.get_absolute_size(self.info_box)[-1])
+            self.info_box.set_text(fit_text)
         else:
             self.info_box.clear()
             # Sometimes you just want to unify interfaces.
-
-    # def fit_content_to_widget(self, line: any, widget: py_cui.widgets.Widget):
-    #     try:
-    #         widget.clear()
-    #     except AttributeError:
-    #         raise  # Will add handling later
-    #
-    #     _, usable_x = self.get_absolute_size(widget)
-    #     widget.
 
     def write_scroll_wrapped(self, lines: Iterable, widget: py_cui.widgets.ScrollMenu):
         widget.clear()
@@ -292,6 +296,4 @@ if __name__ == '__main__':
     try:
         draw_player()
     finally:
-        for line in entry:
-            print(line)
         sd.stop()

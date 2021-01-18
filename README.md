@@ -2,8 +2,8 @@
 
 Just a tiny project to create a script that literally does its name.
 
-Current status:  
-![](Demo/Demo.webp)
+*0.0.1a with fixed output*  
+![](Demo/Demo.png)
 
 ---
 ## Background
@@ -21,6 +21,9 @@ probably I'll be only one using the latter tho.
 
 ---
 ## Status
+
+*0.0.1a demo*  
+![](Demo/Demo.webp)
 
 This impressive pre-stone-age program does whopping 4 actions:
 - refresh audio list
@@ -42,3 +45,19 @@ Will mark those if it's implemented.
 - [ ] lrc support
 - [ ] Show freq. map
 - [ ] favorites
+
+---
+## Things to overcome / overcame
+ 
+1. ### Terrible support of curses on various environment with inconsistent ZWSP and string legnth.
+   ![](Demo/trouble_1.png)
+   This is priamry reason why I am using bare CMD so far. Spent about weeks on this issue yet to find a working
+   terminal on win10.
+   Either they just don't respond to all the inputs with *py_cui*,  others just don't have proper supports on
+   Zero-Width SPace - aka ZWSP - so it breaks all the outputs. I might be better check if I can fix this on
+   *py_cui* side.
+
+2. ### Dynamic updating of texts
+   As I cut off outputs to prevent py_cui to break, layouts, I need to make a way to remember each lines and cycle per
+   line basis to let your see full name of the file. Without help of event loops like *trio*, I'm not quite sure how I
+   am supposed to implement it so far.
