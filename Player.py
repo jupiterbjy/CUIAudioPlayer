@@ -10,9 +10,12 @@ from os import listdir
 from os.path import abspath, dirname, join
 from typing import Callable, Mapping, Generator, Iterable, Tuple, List, Type
 
-import threading
-import pretty_errors
-pretty_errors.activate()
+try:
+    import pretty_errors
+except ImportError:
+    pass
+else:
+    pretty_errors.activate()
 
 
 # THIS WILL NOT RUN PROPERLY ON WINDOWS TERMINAL!

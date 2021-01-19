@@ -3,14 +3,7 @@ import soundfile as sf
 import threading
 
 
-# Ref:
-# https://python-sounddevice.readthedocs.io/en/0.3.15/api/streams.html
-
-
-# Therefore expecting to have duration tag.
 def start_audio_stream(audio_file):
-    # play_time = tinytag.TinyTag.get(audio_location).duration
-
     event_ = threading.Event()
 
     def finish_cb(*args):
@@ -44,5 +37,4 @@ def start_audio_stream(audio_file):
 
 if __name__ == "__main__":
     audio_location = r"E:\github\CUIAudioPlayer\audio_files\Higher's High   ナナヲアカリ.ogg"
-
     start_audio_stream(audio_location)
