@@ -72,3 +72,8 @@ Either they just don't respond to all the inputs with *py_cui*,  others just don
   As I cut off outputs to prevent py_cui to break, layouts, I need to make a way to remember each lines and cycle per
   line basis to let your see full name of the file. Without help of event loops like *trio*, I'm not quite sure how I
   am supposed to implement it so far.
+
+
+### Understanding how callback works in sounddevice.OutputStream
+  So, to solve above issue - at least for playback percentage sort of things, I need to figure out how to use callback.
+  Took long time to temporarily solve this either.
