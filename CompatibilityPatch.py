@@ -67,9 +67,10 @@ def b_remove_suffix_prefix_patch():
 
 
 def fetch_and_run_patches():
-    function_dict = GetModuleReference.list_function(__name__, return_dict=True)
+    blacklist = ["fetch_and_run_patches"]
+    function_dict = GetModuleReference.list_function(__name__, blacklist, return_dict=True)
 
-    for _, patch in OrderedDict(sorted(function_dict.items())):
+    for _, patch in OrderedDict(sorted(function_dict.items())).items():
         patch()
 
 

@@ -11,7 +11,6 @@ def start_audio_stream(audio_file):
         event_.set()
 
     with sf.SoundFile(audio_file) as audio:
-
         last_frame = -1
 
         def callback(data_out, frames: int, time, status: sd.CallbackFlags) -> None:
