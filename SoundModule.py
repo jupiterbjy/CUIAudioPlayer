@@ -100,7 +100,9 @@ def play_audio_not_safe(
         nonlocal last_frame, stream_callback
 
         assert not status
-        assert last_frame != (current_frame := audio_fp.tell())
+        # assert last_frame != (current_frame := audio_fp.tell())
+        if last_frame == (current_frame := audio_fp.tell()):
+            raise sd.CallbackStop
 
         last_frame = current_frame
 
