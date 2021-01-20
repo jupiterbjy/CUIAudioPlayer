@@ -24,7 +24,7 @@ def list_target(module_name: (str, ModuleType), target, blacklist: set, return_d
             source = [(name, ref) for name, ref in source if modules[ref.__module__] is target_module]
 
         for name, ref in source:
-            if name not in blacklist and not name.startswith("_"):
+            if name not in blacklist and not name[0] == "_":
                 yield name, ref
 
     if return_dict:
