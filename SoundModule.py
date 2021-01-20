@@ -154,8 +154,9 @@ class StreamManager:
         self.duration_tag: int = None
 
         self.stream: sd.OutputStream = None
-        self.abort = False
-        self.paused = True
+        self.abort = True
+        self.paused = False
+        self.playing = False
 
     def stream_callback_closure(self) -> Callable:
         # Collecting names here to reduce call overhead.
@@ -171,7 +172,9 @@ class StreamManager:
         def stream_cb(data_out, frames: int, time, status: sd.CallbackFlags) -> None:
             nonlocal last_frame
 
-            assert not status
+            if status:
+                logger.critical(status)
+            # assert not status
 
             # changing order would results in micro bit faster runs, but IDE complains so..
             if last_frame == (current_frame := audio_ref.tell()) or self.abort:
@@ -186,9 +189,17 @@ class StreamManager:
 
     def finished_callback_wrapper(self):
         logger.debug(f"Playback finished. State:{'Abort' if self.abort else 'Finished'}")
+
+        abort_state = self.abort
+        self.playing = False
+
+        self.stop_stream()
         self.audio_data.close()
-        if not self.abort:
+
+        if not abort_state:
             self.finished_cb()
+
+        # WHY THIS IS NOT CALLED?????
 
     def load_new_stream(self, audio_location):
         self.audio_dir = audio_location
@@ -205,26 +216,47 @@ class StreamManager:
             samplerate=self.audio_data.samplerate,
             channels=self.audio_data.channels,
             callback=self.stream_callback_closure(),
-            finished_callback=self.finished_cb
+            finished_callback=self.finished_cb,
+            prime_output_buffers_using_stream_callback=True
         )
 
     def start_stream(self):
+        logger.debug("Starting Stream")
+        if self.playing:
+            return
+
+        self.abort = False
+        self.playing = True
         self.stream.start()
 
     def stop_stream(self):
-        self.stream.stop()
+        logger.debug("Stopping Stream")
+        self.abort = True
+        try:  # Not sure why this is triggered first.
+            self.stream.stop()
+        except AttributeError:
+            pass
 
     def pause_stream(self):
         if self.paused:
-            self.start_stream()
+            if self.playing:
+                return
+            self.playing = True
+            self.stream.start()
         else:
-            self.stop_stream()
+            if not self.playing:
+                return
+            self.stream.stop()
 
         self.paused = not self.paused
+        logger.debug(f"Paused Stream - Status: {self.paused}")
 
     def __del__(self):
-        self.stream.stop()
-        self.audio_data.close()
+        try:
+            self.stream.stop()
+            self.audio_data.close()
+        except AttributeError:
+            pass
 
 
 if __name__ == '__main__':

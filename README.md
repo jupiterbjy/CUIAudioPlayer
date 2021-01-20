@@ -34,11 +34,11 @@ This impressive pre-stone-age program does whopping 4 actions:
 ## Planned features
 Will mark those if it's implemented.
 - [ ] Bare minimum audio player functions
-    - [ ] pause
+    - [x] pause - can pause and play one time, but not twice. Just yet.
     - [x] highlight current
     - [x] wrong file handling
     - [ ] library navigation
-    - [ ] show progress
+    - [x] show progress - Temporarily using seconds.
     - [ ] Continues play
     - [ ] Shuffle
 - [ ] Album art visualizing on some sort of ascii art.

@@ -161,58 +161,49 @@ class AudioPlayer:
 
         self.files: List[str] = []
         self.current_play_generator = None
-        self.playing = False
         self.shuffle = False
 
-        # noinspection PyTypeChecker
-        self.audio_file_loaded: sf.SoundFile = None
-
-        # noinspection PyTypeChecker
-        self.stream: sd.OutputStream = None
+        self.stream: SoundModule.StreamManager = SoundModule.StreamManager(self.show_progress, self.play_next)
 
         self.reload_cb()
 
     # Media control callback definitions -----------------------
 
-    def play_cb(self, next_: int = None):
-        self.stop_cb()
+    def play_cb(self, audio_idx: int = None):
+        if audio_idx is None:
+            audio_idx = self.current_idx
 
-        if next_ is None:
-            selected_idx, track_name = self.current
-        else:
-            selected_idx, track_name = next_, self.files[next_]
+        if self.stream.playing or self.stream.paused:
+            # Pause mode
+            self.stream.pause_stream()
+            return
+
+        # Normal mode, stream is not running.
+        self.play_stream(audio_idx)
+
+    def play_stream(self, audio_idx):
 
         try:
-            audio_fp, stream = SoundModule.play_audio_not_safe(
-                self.abs_dir(track_name), self.show_progress, self.play_next)
-            # SoundModule.play_audio(self.abs_dir(selected_track))
+            self.stream.load_new_stream(self.abs_dir(self.files[audio_idx]))
         except IndexError:
-            self.play_next()
+            logger.debug(f"Invalid idx: {audio_idx} / {len(self.files)}")
             return
 
         except RuntimeError as err:
             self.write_info(f"ERR: {str(err).split(':')[-1]}")
+            self.play_next()
             return
 
-        self.audio_file_loaded = audio_fp
-        self.stream = stream
-        self.stream.start()
+        self.stream.start_stream()
 
-        logger.debug(f"Audio info: {self.audio_file_loaded.name}, {self.audio_file_loaded.samplerate},"
-                     f"{self.audio_file_loaded.format}")
+        logger.debug(f"Audio info: {self.stream.audio_data.name}, {self.stream.audio_data.samplerate},"
+                     f"{self.stream.audio_data.format}")
 
-        self.mark_current_playing(selected_idx)
+        self.mark_current_playing(audio_idx)
         self.init_playlist()
-        self.playing = True
 
     def stop_cb(self):
-        if not self.playing:
-            return
-
-        self.playing = False
-        SoundModule.stop_audio()
-        self.stream.close()
-        self.stream, self.audio_file_loaded = None, None
+        self.stream.stop_stream()
 
         # store current idx
         idx_last = self.audio_list.get_selected_item_index()
@@ -251,7 +242,7 @@ class AudioPlayer:
     def update_meta(self):
         # Extract metadata
         try:
-            ordered = extract_metadata(self.abs_dir(self.current[1]))
+            ordered = extract_metadata(self.abs_dir(self.current_track))
         except IndexError:
             return
 
@@ -301,8 +292,9 @@ class AudioPlayer:
         # counting in some marginal errors of mismatching frames and total frames count.
         file_name = audio_file.name
         max_frame = audio_file.frames
-        self.write_info(f"[{int(current_frame * duration / max_frame):{self.digit(duration)}}/{duration}] Playing now -"
-                        f" {file_name}")
+        format_specifier = f"0{self.digit(duration) + 2}.1f"
+        self.write_info(f"[{current_frame * duration / max_frame:{format_specifier}}/{duration}] "
+                        f"Playing now - {file_name}")
 
     # Playlist control callback --------------------------------
 
@@ -313,7 +305,7 @@ class AudioPlayer:
         # https://engineering.atspotify.com/2014/02/28/how-to-shuffle-songs/
 
         cycle_gen = itertools.cycle(array.array('i', (n for n in range(len(self.files)))))
-        self.current_play_generator = itertools.dropwhile(lambda x: x <= self.current[0], cycle_gen)
+        self.current_play_generator = itertools.dropwhile(lambda x: x <= self.current_idx, cycle_gen)
 
         logger.debug(f"Initialized playlist generator.")
 
@@ -330,9 +322,12 @@ class AudioPlayer:
         return abs_y - self.usable_offset_y, abs_x - self.usable_offset_x
 
     @property
-    def current(self) -> Tuple[int, str]:
-        idx = self.audio_list.get_selected_item_index()
-        return idx, self.files[idx]
+    def current_idx(self) -> int:
+        return self.audio_list.get_selected_item_index()
+
+    @property
+    def current_track(self) -> str:
+        return self.files[self.current_idx]
 
     @staticmethod
     def abs_dir(file_name):
@@ -342,7 +337,7 @@ class AudioPlayer:
 
 def draw_player():
     root = py_cui.PyCUI(5, 5)
-    root.set_refresh_timeout(1)
+    root.set_refresh_timeout(0.33)  # this don't have to be a second.
     root.set_title(f"CUI Audio Player - v{VERSION_TAG}")
     player_ref = AudioPlayer(root)
 
