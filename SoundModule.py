@@ -238,6 +238,7 @@ class StreamManager:
             pass
 
     def pause_stream(self):
+        # TODO: remember the playback position, then start stream since then!
         if self.paused:
             if self.playing:
                 return

@@ -2,7 +2,10 @@
 
 Just a tiny project to create a script that literally does its name.
 
-*0.0.1a with fixed output*  
+Only working configurations are Linux Terminal / CMD / Windows Terminal + WSL.
+Will show as broken on other configurations on Win10.
+
+*0.0.2a*  
 ![](Demo/Images/Demo.png)
 
 ---
@@ -28,7 +31,7 @@ probably I'll be only one using the latter tho.
 This impressive pre-stone-age program does whopping 4 actions:
 - refresh audio list
 - show *part* of metadata (No joke!)
-- play & stop, no pause
+- play & stop, broken pause
 
 ---
 ## Planned features
