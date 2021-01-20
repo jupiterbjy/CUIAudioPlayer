@@ -1,7 +1,9 @@
 import sounddevice as sd
 import soundfile as sf
 import py_cui
+import array
 import functools
+import itertools
 from collections import OrderedDict
 from tinytag import TinyTag
 from wcwidth import wcswidth, wcwidth
@@ -10,11 +12,12 @@ from os import listdir
 from os.path import abspath, dirname, join
 from typing import Callable, Mapping, Generator, Iterable, Tuple, List
 
+from LoggingConfigurator import logger
 import CompatibilityPatch
 import SoundModule
-from LoggingConfigurator import logger
 
 try:
+    # noinspection PyUnresolvedReferences
     import pretty_errors
     pretty_errors.activate()
 except ImportError:
@@ -127,6 +130,8 @@ def fit_to_actual_width(text: str, length_lim: int) -> str:
 class AudioPlayer:
     ellipsis_ = ".."  # 3 dots 2 long
     usable_offset_y, usable_offset_x = 2, 6  # Excl. Border, Spacing of widget from abs size.
+    next_audio_delay = 1  # not sure yet how to implement this in main thread without spawning one.
+
     # EXPECTING 5, 3 Layout!
 
     def __init__(self, root: py_cui.PyCUI):
@@ -155,7 +160,9 @@ class AudioPlayer:
         self.info_box.add_text_color_rule("ERR:", py_cui.WHITE_ON_RED, "startswith")
 
         self.files: List[str] = []
+        self.current_play_generator = None
         self.playing = False
+        self.shuffle = False
 
         # noinspection PyTypeChecker
         self.audio_file_loaded: sf.SoundFile = None
@@ -163,19 +170,24 @@ class AudioPlayer:
         # noinspection PyTypeChecker
         self.stream: sd.OutputStream = None
 
-        self.get_absolute_size(self.audio_list)
+        self.reload_cb()
 
-    # callback definitions
+    # Media control callback definitions -----------------------
 
-    def play_cb(self):
+    def play_cb(self, next_: int = None):
         self.stop_cb()
 
-        selected_idx, selected_track = self.current
+        if next_ is None:
+            selected_idx, track_name = self.current
+        else:
+            selected_idx, track_name = next_, self.files[next_]
 
         try:
-            audio_fp, output_stream = SoundModule.play_audio_not_safe(self.abs_dir(selected_track))
+            audio_fp, stream = SoundModule.play_audio_not_safe(
+                self.abs_dir(track_name), self.show_progress, self.play_next)
             # SoundModule.play_audio(self.abs_dir(selected_track))
         except IndexError:
+            self.play_next()
             return
 
         except RuntimeError as err:
@@ -183,24 +195,23 @@ class AudioPlayer:
             return
 
         self.audio_file_loaded = audio_fp
-        self.stream = output_stream
+        self.stream = stream
         self.stream.start()
 
         logger.debug(f"Audio info: {self.audio_file_loaded.name}, {self.audio_file_loaded.samplerate},"
                      f"{self.audio_file_loaded.format}")
 
-        self.write_info(f"Playing Now - {selected_track}")
         self.mark_current_playing(selected_idx)
+        self.init_playlist()
         self.playing = True
-        # stream.
 
     def stop_cb(self):
         if not self.playing:
             return
 
         self.playing = False
-        self.stream.stop()
-        self.audio_file_loaded.close()
+        SoundModule.stop_audio()
+        self.stream.close()
         self.stream, self.audio_file_loaded = None, None
 
         # store current idx
@@ -247,7 +258,7 @@ class AudioPlayer:
         self.write_meta_list(audio_list_str_gen(ordered))
 
     # TODO: create branch to implement full-color support for py_cui.
-    # Wrappers
+    # Implementation / helper / wrappers -----------------------
 
     def write_info(self, text: str):
         if text:
@@ -271,16 +282,52 @@ class AudioPlayer:
     def write_audio_list(self, lines: Iterable):
         self.write_scroll_wrapped(lines, self.audio_list)
 
-    # Extra functions
-
-    def get_absolute_size(self, widget: py_cui.widgets.Widget) -> Tuple[int, int]:
-        abs_y, abs_x = widget.get_absolute_dimensions()
-        return abs_y - self.usable_offset_y, abs_x - self.usable_offset_x
-
     def mark_current_playing(self, track_idx):
         source = self.audio_list.get_item_list()
         source[track_idx] = source[track_idx].replace("|", "►")
         self.write_audio_list(source)
+
+    def set_current_selected(self, track_idx):
+        pass
+
+    @staticmethod
+    @functools.lru_cache(256)
+    def digit(int_):
+        return len(str(int_))
+
+    def show_progress(self, audio_file, current_frame, duration):
+        # TODO: use py-cui builtin progress bar instead.
+
+        # counting in some marginal errors of mismatching frames and total frames count.
+        file_name = audio_file.name
+        max_frame = audio_file.frames
+        self.write_info(f"[{int(current_frame * duration / max_frame):{self.digit(duration)}}/{duration}] Playing now -"
+                        f" {file_name}")
+
+    # Playlist control callback --------------------------------
+
+    def init_playlist(self):
+        # if self.shuffle:
+        #     self.current_play_generator =
+        # Shuffling is harder than imagined!
+        # https://engineering.atspotify.com/2014/02/28/how-to-shuffle-songs/
+
+        cycle_gen = itertools.cycle(array.array('i', (n for n in range(len(self.files)))))
+        self.current_play_generator = itertools.dropwhile(lambda x: x <= self.current[0], cycle_gen)
+
+        logger.debug(f"Initialized playlist generator.")
+
+    def play_next(self):
+        next_ = next(self.current_play_generator)
+        logger.debug(f"Playing Next - {next_}")
+
+        self.play_cb(next_)
+
+    # UI related -----------------------------------------------
+
+    def get_absolute_size(self, widget: py_cui.widgets.Widget) -> Tuple[int, int]:
+        abs_y, abs_x = widget.get_absolute_dimensions()
+        return abs_y - self.usable_offset_y, abs_x - self.usable_offset_x
 
     @property
     def current(self) -> Tuple[int, str]:
@@ -295,6 +342,7 @@ class AudioPlayer:
 
 def draw_player():
     root = py_cui.PyCUI(5, 5)
+    root.set_refresh_timeout(1)
     root.set_title(f"CUI Audio Player - v{VERSION_TAG}")
     player_ref = AudioPlayer(root)
 

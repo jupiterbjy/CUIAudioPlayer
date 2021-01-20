@@ -1,7 +1,10 @@
 import sounddevice as sd
 import soundfile as sf
 import threading
+from tinytag import TinyTag
 from typing import Callable, Tuple
+
+from LoggingConfigurator import logger
 
 
 # TODO: add logging tab with stacked widget or something
@@ -76,11 +79,9 @@ def play_audio_not_safe(
     :return: sf.SoundFile, sd.OutputStream
     """
 
-    event_ = threading.Event()
-
     if stream_callback is None:
 
-        def stream_callback():
+        def stream_callback(audio_file, frames):
             pass
 
     if finished_callback is None:
@@ -89,30 +90,48 @@ def play_audio_not_safe(
             pass
 
     def finish_cb() -> None:
+        logger.debug("Playback finished.")
         finished_callback()
-        event_.set()
+        audio_fp.close()
 
     audio_fp = sf.SoundFile(audio_location)
-    last_frame = -1
-    dtype = sd.default.dtype[1]
 
-    def callback(data_out, frames: int, time, status: sd.CallbackFlags) -> None:
-        nonlocal last_frame, stream_callback
+    def wrapper():
+        # gather names closer to callback function in the hope of reducing call overhead.
 
-        assert not status
-        # assert last_frame != (current_frame := audio_fp.tell())
-        if last_frame == (current_frame := audio_fp.tell()):
-            raise sd.CallbackStop
+        last_frame = -1
+        audio_file = audio_fp
+        dtype = sd.default.dtype[1]
+        duration = int(TinyTag.get(audio_location).as_dict()['duration'])
+        next_callback_run = 3
 
-        last_frame = current_frame
+        def callback(data_out, frames: int, time, status: sd.CallbackFlags) -> None:
+            nonlocal last_frame, stream_callback, next_callback_run
 
-        audio_fp.buffer_read_into(data_out, dtype)
-        # stream_callback()
+            assert not status
+            # assert last_frame != (current_frame := audio_fp.tell())
+            try:
+                if last_frame == (current_frame := audio_file.tell()):
+                    raise sd.CallbackStop
+            except RuntimeError as err:
+                raise sd.CallbackStop from err
+
+            last_frame = current_frame
+
+            audio_file.buffer_read_into(data_out, dtype)
+            if next_callback_run == 0:
+                stream_callback(audio_fp, current_frame, duration)
+                next_callback_run = 3
+            else:
+                next_callback_run -= 1
+            # Stream callback signature for other functions
+
+        return callback
 
     stream = sd.OutputStream(
         samplerate=audio_fp.samplerate,
         channels=audio_fp.channels,
-        callback=callback,
+        callback=wrapper(),
         finished_callback=finish_cb,
     )
 
