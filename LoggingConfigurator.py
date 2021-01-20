@@ -6,7 +6,7 @@ LOGGER = logging.getLogger("UI_DEBUG")
 if not LOGGER.handlers:
     _handler = logging.StreamHandler()
     _handler.setLevel("DEBUG")
-    _handler.setFormatter(logging.Formatter("[--%(levelname)s--] %(message)s"))
+    _handler.setFormatter(logging.Formatter("%(asctime)s [--%(levelname)s--] %(message)s"))
     LOGGER.addHandler(_handler)
     LOGGER.setLevel("DEBUG")
 
@@ -42,6 +42,7 @@ class CallerLoggedLogger:
         self.critical = self.critical
         # triggering __getattr__ so those methods are bound, and show up on inspection either.
         # not a good practice I suppose?
+        # Found out there's %(funcName)% in logging parameter, lel.
 
     def __getattr__(self, item):
         try:
