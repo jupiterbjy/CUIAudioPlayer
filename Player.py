@@ -11,6 +11,8 @@ from os.path import abspath, dirname, join
 from typing import Callable, Mapping, Generator, Iterable, Tuple, List
 
 import CompatibilityPatch
+import SoundModule
+from LoggingConfigurator import logger
 
 try:
     import pretty_errors
@@ -27,17 +29,6 @@ AUDIO_FOLDER = "audio_files"
 AUDIO_TYPES = ".ogg", ".mp3", ".m4a", ".flac"
 VERSION_TAG = "0.0.2a"
 WINDOWS = platform == 'win32'
-
-
-def play_track(file_name: str) -> sd.OutputStream:
-    data, fs = sf.read(file_name)
-
-    sd.play(data, fs)
-    return sd.get_stream()
-
-
-def stop_track():  # She's so smol
-    sd.stop()
 
 
 def extract_metadata(abs_file_dir):
@@ -103,6 +94,9 @@ def pad_actual_length(source: str, pad: str = "\u200b") -> Tuple[str, str]:
     This way slicing will cut asian letters properly, not breaking tidy layouts.
     :return: padding character and padded string
     """
+    if wcswidth(source) == len(source):
+        return pad, source
+
     def inner_gen(source_: str) -> Generator[str, None, None]:
         for ch in source_:
             yield ch + pad if wcwidth(ch) == 2 else ch
@@ -163,7 +157,14 @@ class AudioPlayer:
         self.files: List[str] = []
         self.playing = False
 
+        # noinspection PyTypeChecker
+        self.audio_file_loaded: sf.SoundFile = None
+
+        # noinspection PyTypeChecker
+        self.stream: sd.OutputStream = None
+
         self.get_absolute_size(self.audio_list)
+
     # callback definitions
 
     def play_cb(self):
@@ -172,12 +173,21 @@ class AudioPlayer:
         selected_idx, selected_track = self.current
 
         try:
-            stream = play_track(self.abs_dir(selected_track))
+            audio_fp, output_stream = SoundModule.play_audio_not_safe(self.abs_dir(selected_track))
+            # SoundModule.play_audio(self.abs_dir(selected_track))
         except IndexError:
             return
+
         except RuntimeError as err:
             self.write_info(f"ERR: {str(err).split(':')[-1]}")
             return
+
+        self.audio_file_loaded = audio_fp
+        self.stream = output_stream
+        self.stream.start()
+
+        logger.debug(f"Audio info: {self.audio_file_loaded.name}, {self.audio_file_loaded.samplerate},"
+                     f"{self.audio_file_loaded.format}")
 
         self.write_info(f"Playing Now - {selected_track}")
         self.mark_current_playing(selected_idx)
@@ -189,7 +199,9 @@ class AudioPlayer:
             return
 
         self.playing = False
-        stop_track()
+        self.stream.stop()
+        self.audio_file_loaded.close()
+        self.stream, self.audio_file_loaded = None, None
 
         # store current idx
         idx_last = self.audio_list.get_selected_item_index()

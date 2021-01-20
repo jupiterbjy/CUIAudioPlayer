@@ -35,6 +35,14 @@ class CallerLoggedLogger:
     def __init__(self, identifier=("<", ">")):
         self.ident_left, self.ident_right = identifier
 
+        self.debug = self.debug
+        self.info = self.info
+        self.warning = self.warning
+        self.error = self.error
+        self.critical = self.critical
+        # triggering __getattr__ so those methods are bound, and show up on inspection either.
+        # not a good practice I suppose?
+
     def __getattr__(self, item):
         try:
             target = getattr(LOGGER, item)
