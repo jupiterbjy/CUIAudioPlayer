@@ -71,3 +71,6 @@ def fetch_and_run_patches():
 
     for _, patch in OrderedDict(sorted(function_dict.items())):
         patch()
+
+
+fetch_and_run_patches()

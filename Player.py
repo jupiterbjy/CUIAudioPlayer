@@ -14,10 +14,11 @@ import CompatibilityPatch
 
 try:
     import pretty_errors
+    pretty_errors.activate()
 except ImportError:
     pass
-else:
-    pretty_errors.activate()
+
+assert CompatibilityPatch
 
 
 # THIS WILL NOT RUN PROPERLY ON WINDOWS TERMINAL! Currently Developing on CMD!
