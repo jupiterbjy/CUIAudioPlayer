@@ -8,7 +8,9 @@ from wcwidth import wcswidth, wcwidth
 from sys import platform
 from os import listdir
 from os.path import abspath, dirname, join
-from typing import Callable, Mapping, Generator, Iterable, Tuple, List, Type
+from typing import Callable, Mapping, Generator, Iterable, Tuple, List
+
+import CompatibilityPatch
 
 try:
     import pretty_errors
@@ -18,19 +20,12 @@ else:
     pretty_errors.activate()
 
 
-# THIS WILL NOT RUN PROPERLY ON WINDOWS TERMINAL!
+# THIS WILL NOT RUN PROPERLY ON WINDOWS TERMINAL! Currently Developing on CMD!
 # Assuming relative location
 AUDIO_FOLDER = "audio_files"
 AUDIO_TYPES = ".ogg", ".mp3", ".m4a", ".flac"
-VERSION_TAG = "0.0.1a"
+VERSION_TAG = "0.0.2a"
 WINDOWS = platform == 'win32'
-
-
-class Device:
-    # Singleton? is this correct?
-    name: str = ""
-    frequency: int = 48000
-    channels: int = 2
 
 
 def play_track(file_name: str) -> sd.OutputStream:
@@ -61,7 +56,6 @@ def fetch_files():
         return fetch_files()
     else:
         return [fn for fn in file_list if fn.endswith(AUDIO_TYPES)]
-        # I love this shiny new suffix / prefix search. Only in 3.9+.
 
 
 def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable) -> None:
@@ -117,7 +111,6 @@ def pad_actual_length(source: str, pad: str = "\u200b") -> Tuple[str, str]:
     # TOOK WEEKS TO FIGURE OUT THIS, GJ MS
 
 
-# TODO: add backward-compatibility patch to str for support ```.endswith()``` on start of script.
 def fit_to_actual_width(text: str, length_lim: int) -> str:
 
     padding, padded = pad_actual_length(text)
