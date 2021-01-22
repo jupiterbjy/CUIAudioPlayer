@@ -12,18 +12,19 @@ def start_audio_stream(audio_file):
 
     with sf.SoundFile(audio_file) as audio:
         last_frame = -1
+        # audio.seek(9300000)
 
         def callback(data_out, frames: int, time, status: sd.CallbackFlags) -> None:
             nonlocal last_frame
 
             assert not status
 
+            read = audio.buffer_read_into(data_out, sd.default.dtype[1])
+
             assert last_frame != (current_frame := audio.tell())
 
             last_frame = current_frame
-
-            audio.buffer_read_into(data_out, sd.default.dtype[1])
-            print(frames, last_frame, audio.frames)
+            print(frames, read, last_frame, audio.frames)
 
         with sd.OutputStream(
             samplerate=audio.samplerate,

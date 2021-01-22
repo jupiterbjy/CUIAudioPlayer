@@ -163,13 +163,14 @@ class AudioPlayer:
         self.current_play_generator = None
         self.shuffle = False
 
-        self.stream: SoundModule.StreamManager = SoundModule.StreamManager(self.show_progress, self.play_next)
+        self.stream: SoundModule.StreamManager = SoundModule.StreamManager(self.show_progress)
 
         self.reload_cb()
 
     # Media control callback definitions -----------------------
 
     def play_cb(self, audio_idx: int = None):
+        logger.debug(f"Playing: {self.stream.playing} / Paused: {self.stream.paused}")
         if audio_idx is None:
             audio_idx = self.current_idx
 

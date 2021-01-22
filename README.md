@@ -37,7 +37,7 @@ This impressive pre-stone-age program does whopping 4 actions:
 ## Planned features
 Will mark those if it's implemented.
 - [ ] Bare minimum audio player functions
-    - [x] pause - can pause and play one time, but not twice. Just yet.
+    - [x] pause
     - [x] highlight current
     - [x] wrong file handling
     - [ ] library navigation
@@ -78,5 +78,4 @@ Either they just don't respond to all the inputs with *py_cui*,  others just don
 
 
 ### Understanding how callback works in sounddevice.OutputStream
-  So, to solve above issue - at least for playback percentage sort of things, I need to figure out how to use callback.
-  Took long time to temporarily solve this either.
+  [Reference](https://github.com/spatialaudiKo/python-sounddevice/issues/306)

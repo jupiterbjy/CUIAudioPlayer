@@ -145,7 +145,7 @@ class StreamManager:
         self.callback_minimum_cycle = callback_every_n
 
         self.stream_cb = stream_callback if stream_callback else lambda x, y, z: None
-        self.finished_cb = finished_callback if stream_callback else lambda: None
+        self.finished_cb = finished_callback if finished_callback else lambda: None
 
         self.audio_data: sf.SoundFile = None
         self.tag_data: Union[TinyTag, ID3, Ogg, Wave, Flac] = None
@@ -154,7 +154,7 @@ class StreamManager:
         self.duration_tag: int = None
 
         self.stream: sd.OutputStream = None
-        self.abort = True
+        self.abort = False
         self.paused = False
         self.playing = False
 
@@ -163,40 +163,43 @@ class StreamManager:
         last_frame = -1
         dtype = sd.default.dtype[1]
         audio_ref = self.audio_data
+        channel = audio_ref.channels
         callback = self.stream_cb
         duration = self.duration_tag
 
         cycle = itertools.cycle((not n for n in range(self.callback_minimum_cycle)))
-        # this looks much neat than changing variable inside callback.
+        # to reduce load, custom callback will be called every n-th iteration of this generator.
 
         def stream_cb(data_out, frames: int, time, status: sd.CallbackFlags) -> None:
             nonlocal last_frame
+            assert not status
 
-            if status:
-                logger.critical(status)
-            # assert not status
-
-            # changing order would results in micro bit faster runs, but IDE complains so..
-            if last_frame == (current_frame := audio_ref.tell()) or self.abort:
+            if (written := audio_ref.buffer_read_into(data_out, dtype)) < frames:
+                logger.debug(f"Writing underflow buffer - {written} frames written.")
+                data_out[written:] = [[0.0] * channel for _ in range(frames - written)]
                 raise sd.CallbackStop
 
-            audio_ref.buffer_read_into(data_out, dtype)
+            if last_frame == (current_frame := audio_ref.tell()) or self.abort:
+                raise sd.CallbackAbort
+
+            last_frame = current_frame
+
             if next(cycle):
                 callback(audio_ref, current_frame, duration)
-            # Stream callback signature for other functions
+                # Stream callback signature for user-supplied callbacks
+                # Providing current_frame and duration to reduce call overhead from user-callback side.
 
         return stream_cb
 
     def finished_callback_wrapper(self):
         logger.debug(f"Playback finished. State:{'Abort' if self.abort else 'Finished'}")
-
-        abort_state = self.abort
         self.playing = False
 
-        self.stop_stream()
-        self.audio_data.close()
+        if self.paused:
+            return
 
-        if not abort_state:
+        self.audio_data.close()
+        if not self.abort:
             self.finished_cb()
 
         # WHY THIS IS NOT CALLED?????
@@ -216,8 +219,7 @@ class StreamManager:
             samplerate=self.audio_data.samplerate,
             channels=self.audio_data.channels,
             callback=self.stream_callback_closure(),
-            finished_callback=self.finished_cb,
-            prime_output_buffers_using_stream_callback=True
+            finished_callback=self.finished_callback_wrapper,
         )
 
     def start_stream(self):
@@ -239,22 +241,21 @@ class StreamManager:
 
     def pause_stream(self):
         # TODO: remember the playback position, then start stream since then!
-        if self.paused:
-            if self.playing:
-                return
+        # self.paused = not self.paused
+
+        if self.paused and not self.stream.active:
             self.playing = True
+            self.paused = False
             self.stream.start()
-        else:
-            if not self.playing:
-                return
+        elif not self.paused and self.stream.active:
+            self.paused = True
             self.stream.stop()
 
-        self.paused = not self.paused
-        logger.debug(f"Paused Stream - Status: {self.paused}")
+        logger.debug(f"Paused: {self.paused} / Stream: {self.stream.active}")
 
     def __del__(self):
         try:
-            self.stream.stop()
+            self.stop_stream()
             self.audio_data.close()
         except AttributeError:
             pass
@@ -262,12 +263,13 @@ class StreamManager:
 
 if __name__ == '__main__':
     def test():
-        """
-        >>> from SoundModule import StreamManager
-        >>> audio_location_ = r"E:\github\CUIAudioPlayer\audio_files\Higher's High   ナナヲアカリ.ogg"
-        >>> ref = StreamManager()
-        >>> ref.load_new_stream(audio_location_)
-        >>> ref.start_stream()
-        """
+        from SoundModule import StreamManager
+        audio_location_1 = r"E:\github\CUIAudioPlayer\audio_files\short_sample_okayu_rejection.ogg"
+        audio_location_2 = r"E:\github\CUIAudioPlayer\audio_files\Higher's High   ナナヲアカリ.ogg"
+        ref = StreamManager()
+        ref.load_new_stream(audio_location_2)
+        ref.start_stream()
+
+        # Originally meant to hold doctest, but it was inconvenience to copy-pasting so remove it.
 
     # Try this in python console. of course change the audio.
