@@ -5,8 +5,8 @@ Just a tiny project to create a script that literally does its name.
 Only working configurations are Linux Terminal / CMD / Windows Terminal + WSL.
 Will show as broken on other configurations on Win10.
 
-*0.0.2a*  
-![](Demo/Images/Demo.png)
+*0.0.2a - 2x speed*  
+![](Demo/Images/Demo.webp)
 
 ---
 ## Background
@@ -25,9 +25,6 @@ probably I'll be only one using the latter tho.
 ---
 ## Status
 
-*0.0.1a demo*  
-![](Demo/Images/Demo.webp)
-
 This impressive pre-stone-age program does whopping 4 actions:
 - refresh audio list
 - show *part* of metadata (No joke!)
@@ -42,7 +39,7 @@ Will mark those if it's implemented.
     - [x] wrong file handling
     - [ ] library navigation
     - [x] show progress - Temporarily using seconds.
-    - [ ] Continues play
+    - [x] Continues play - Half broken, but works mostly.
     - [ ] Shuffle
 - [ ] Album art visualizing on some sort of ascii art.
 - [ ] lrc support
@@ -78,4 +75,4 @@ Either they just don't respond to all the inputs with *py_cui*,  others just don
 
 
 ### Understanding how callback works in sounddevice.OutputStream
-  [Reference](https://github.com/spatialaudiKo/python-sounddevice/issues/306)
+  To see how dumb I am - check [this](https://github.com/spatialaudiKo/python-sounddevice/issues/306) out.
