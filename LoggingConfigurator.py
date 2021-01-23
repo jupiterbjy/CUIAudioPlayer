@@ -2,11 +2,18 @@ import logging
 import inspect
 
 
+LOG_DETAILED_CALLER = True
+# This will log where the function is from.
+
 LOGGER = logging.getLogger("UI_DEBUG")
+
+if LOG_DETAILED_CALLER:
+    import gc
+
 if not LOGGER.handlers:
     _handler = logging.StreamHandler()
     _handler.setLevel("DEBUG")
-    _handler.setFormatter(logging.Formatter("%(asctime)s [--%(levelname)s--] %(message)s"))
+    _handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
     LOGGER.addHandler(_handler)
     LOGGER.setLevel("DEBUG")
 
@@ -17,6 +24,24 @@ def get_caller_stack_name(depth=1):
     :param depth: determine which scope to inspect, for nested usage.
     """
     return inspect.stack()[depth][3]
+
+
+def get_caller_stack_and_association(depth=1):
+    stack_frame = inspect.stack()[depth][0]
+    f_code_ref = stack_frame.f_code
+
+    def get_reference_filter():
+        for obj in gc.get_referrers(f_code_ref):
+            try:
+                if obj.__code__ is f_code_ref:  # checking identity
+                    return obj
+            except AttributeError:
+                continue
+
+    actual_function_ref = get_reference_filter()
+    return actual_function_ref.__qualname__
+
+# https://stackoverflow.com/questions/52715425
 
 
 def log_caller():
@@ -44,6 +69,8 @@ class CallerLoggedLogger:
         # not a good practice I suppose?
         # Found out there's %(funcName)% in logging parameter, lel.
 
+        self.name_fetching_method = get_caller_stack_and_association if LOG_DETAILED_CALLER else get_caller_stack_name
+
     def __getattr__(self, item):
         try:
             target = getattr(LOGGER, item)
@@ -56,7 +83,7 @@ class CallerLoggedLogger:
     def decorate_logging(self, logging_function, ):
 
         def inner(msg, *args, **kwargs):
-            caller = get_caller_stack_name(depth=2)
+            caller = self.name_fetching_method(depth=2)
             logging_function(f"{self.ident_left}{caller}{self.ident_right} {msg}", *args, **kwargs)
 
         return inner
