@@ -9,7 +9,7 @@ from tinytag import TinyTag
 from wcwidth import wcswidth, wcwidth
 from sys import platform
 from os import listdir
-from os.path import abspath, dirname, join
+from os.path import abspath, dirname, join, split
 from typing import Callable, Mapping, Generator, Iterable, Tuple, List
 
 from LoggingConfigurator import logger
@@ -132,6 +132,8 @@ class AudioPlayer:
     usable_offset_y, usable_offset_x = 2, 6  # Excl. Border, Spacing of widget from abs size.
     next_audio_delay = 1  # not sure yet how to implement this in main thread without spawning one.
 
+    symbols = {"play": "▶", "pause": "⏸", "stop": "⏹"}
+
     # EXPECTING 5, 3 Layout!
 
     def __init__(self, root: py_cui.PyCUI):
@@ -153,17 +155,19 @@ class AudioPlayer:
 
         # Key binds
         self.play_btn.add_key_command(py_cui.keys.KEY_SPACE, self.play_cb)
+        self.audio_list.add_key_command(py_cui.keys.KEY_ENTER, self.play_stream)
 
         # add color rules - might be better implementing custom coloring methods, someday.
-        self.audio_list.add_text_color_rule(r"[0-9 ].*▶", py_cui.WHITE_ON_YELLOW, "contains")
-        self.audio_list.add_text_color_rule(r"[0-9 ].*⏸", py_cui.WHITE_ON_YELLOW, "contains")
-        self.audio_list.add_text_color_rule(r"[0-9 ].*⏹", py_cui.WHITE_ON_YELLOW, "contains")
+        self.audio_list.add_text_color_rule(r"[0-9 ].*" + self.symbols["play"], py_cui.WHITE_ON_YELLOW, "contains")
+        self.audio_list.add_text_color_rule(r"[0-9 ].*" + self.symbols["pause"], py_cui.WHITE_ON_YELLOW, "contains")
+        self.audio_list.add_text_color_rule(r"[0-9 ].*" + self.symbols["stop"], py_cui.WHITE_ON_YELLOW, "contains")
         # self.audio_list.add_text_color_rule(r"►", py_cui.WHITE_ON_YELLOW, "contains")
         self.info_box.add_text_color_rule("ERR:", py_cui.WHITE_ON_RED, "startswith")
 
         self.files: List[str] = []
         self.current_play_generator = None
         self.shuffle = False
+        self.continue_playing = False
 
         self.stream: SoundModule.StreamManager = SoundModule.StreamManager(self.show_progress, self.play_next)
 
@@ -171,16 +175,20 @@ class AudioPlayer:
 
     # Media control callback definitions -----------------------
 
-    def play_cb(self, audio_idx: int = None):
+    def play_cb(self):
         try:
             self.stream.pause_stream()  # assuming State: Paused
+            self.mark_as_paused(self.currently_playing)
         except RuntimeError:
             self.stream.start_stream()  # State: stopped
+            self.mark_as_playing(self.currently_playing)
         except FileNotFoundError:
             # State: Unloaded
-            self.play_stream(audio_idx if audio_idx is not None else self.selected_idx)
+            self.play_stream()
 
-    def play_stream(self, audio_idx):
+    def play_stream(self, audio_idx=None):
+        if not audio_idx:
+            audio_idx = self.selected_idx
 
         try:
             self.stream.load_stream(self.abs_dir(audio_idx))
@@ -190,12 +198,11 @@ class AudioPlayer:
 
         except RuntimeError as err:
             self.write_info(f"ERR: {str(err).split(':')[-1]}")
-            self.play_next()
             return
 
+        self.refresh_list(False)
         self.stream.start_stream()
-
-        self.mark_current_playing(audio_idx)
+        self.mark_as_playing(audio_idx)
         self.init_playlist()
 
     def stop_cb(self):
@@ -209,6 +216,7 @@ class AudioPlayer:
 
         # revert texts
         self.refresh_list(search_files=False)
+        self.mark_as_stopped(self.currently_playing)
         self.write_info("")
 
         # revert idx back
@@ -272,10 +280,37 @@ class AudioPlayer:
     def write_audio_list(self, lines: Iterable):
         self.write_scroll_wrapped(lines, self.audio_list)
 
-    def mark_current_playing(self, track_idx):
+    def mark_target(self, track_idx, search_target: str, replace_target: str):
         source = self.audio_list.get_item_list()
-        source[track_idx] = source[track_idx].replace("|", "►")
+        source[track_idx] = source[track_idx].replace(search_target, replace_target)
         self.write_audio_list(source)
+
+    def mark_as_playing(self, track_idx):
+        self.continue_playing = True
+
+        if self.stream.stream_state == SoundModule.StreamPausedState:
+            self.mark_target(track_idx, self.symbols["pause"], self.symbols["play"])
+
+        elif self.stream.stream_state == SoundModule.StreamStoppedState:
+            self.mark_target(track_idx, self.symbols["stop"], self.symbols["play"])
+        else:
+            self.mark_target(track_idx, "|", self.symbols["play"])
+
+    def mark_as_paused(self, track_idx):
+        if self.stream.stream_state == SoundModule.StreamPausedState:
+
+            self.continue_playing = False
+            self.mark_target(track_idx, self.symbols["play"], self.symbols["pause"])
+        else:
+            self.mark_as_playing(track_idx)
+
+    def mark_as_stopped(self, track_idx):
+        self.continue_playing = False
+
+        if self.stream.stream_state == SoundModule.StreamPausedState:
+            self.mark_target(track_idx, self.symbols["pause"], self.symbols["stop"])
+        else:
+            self.mark_target(track_idx, self.symbols["play"], self.symbols["stop"])
 
     def set_current_selected(self, track_idx):
         pass
@@ -305,15 +340,18 @@ class AudioPlayer:
         # https://engineering.atspotify.com/2014/02/28/how-to-shuffle-songs/
 
         cycle_gen = itertools.cycle(array.array('i', (n for n in range(len(self.files)))))
-        self.current_play_generator = itertools.dropwhile(lambda x: x <= self.selected_idx, cycle_gen)
+        self.current_play_generator = itertools.dropwhile(lambda x: x <= self.currently_playing, cycle_gen)
 
         logger.debug(f"Initialized playlist generator.")
 
     def play_next(self):
-        next_ = next(self.current_play_generator)
-        logger.debug(f"Playing Next - {next_}")
+        logger.debug(f"Condition: {self.continue_playing}")
 
-        self.play_cb(next_)
+        if self.continue_playing:
+            next_ = next(self.current_play_generator)
+            logger.debug(f"Playing Next - {next_}")
+
+            self.play_stream(next_)
 
     # UI related -----------------------------------------------
 
@@ -331,8 +369,8 @@ class AudioPlayer:
 
     @property
     def currently_playing(self) -> int:
-        file_name = self.stream.audio_info.title
-        return self.files.index(file_name)
+        file_name = self.stream.audio_info.loaded_data.name
+        return self.files.index(split(file_name)[1])
 
     def abs_dir(self, idx):
         # noinspection PyUnresolvedReferences
