@@ -155,37 +155,35 @@ class AudioPlayer:
         self.play_btn.add_key_command(py_cui.keys.KEY_SPACE, self.play_cb)
 
         # add color rules - might be better implementing custom coloring methods, someday.
-        # self.audio_list.add_text_color_rule(r"[0-9 ]►", py_cui.WHITE_ON_YELLOW, "startswith")
-        self.audio_list.add_text_color_rule(r"►", py_cui.WHITE_ON_YELLOW, "contains")
+        self.audio_list.add_text_color_rule(r"[0-9 ].*▶", py_cui.WHITE_ON_YELLOW, "contains")
+        self.audio_list.add_text_color_rule(r"[0-9 ].*⏸", py_cui.WHITE_ON_YELLOW, "contains")
+        self.audio_list.add_text_color_rule(r"[0-9 ].*⏹", py_cui.WHITE_ON_YELLOW, "contains")
+        # self.audio_list.add_text_color_rule(r"►", py_cui.WHITE_ON_YELLOW, "contains")
         self.info_box.add_text_color_rule("ERR:", py_cui.WHITE_ON_RED, "startswith")
 
         self.files: List[str] = []
         self.current_play_generator = None
         self.shuffle = False
 
-        self.stream: SoundModule.StreamManager = SoundModule.StreamManager(self.show_progress)
+        self.stream: SoundModule.StreamManager = SoundModule.StreamManager(self.show_progress, self.play_next)
 
         self.reload_cb()
 
     # Media control callback definitions -----------------------
 
     def play_cb(self, audio_idx: int = None):
-        logger.debug(f"Playing: {self.stream.playing} / Paused: {self.stream.paused}")
-        if audio_idx is None:
-            audio_idx = self.current_idx
-
-        if self.stream.playing or self.stream.paused:
-            # Pause mode
-            self.stream.pause_stream()
-            return
-
-        # Normal mode, stream is not running.
-        self.play_stream(audio_idx)
+        try:
+            self.stream.pause_stream()  # assuming State: Paused
+        except RuntimeError:
+            self.stream.start_stream()  # State: stopped
+        except FileNotFoundError:
+            # State: Unloaded
+            self.play_stream(audio_idx if audio_idx is not None else self.selected_idx)
 
     def play_stream(self, audio_idx):
 
         try:
-            self.stream.load_new_stream(self.abs_dir(self.files[audio_idx]))
+            self.stream.load_stream(self.abs_dir(audio_idx))
         except IndexError:
             logger.debug(f"Invalid idx: {audio_idx} / {len(self.files)}")
             return
@@ -197,14 +195,14 @@ class AudioPlayer:
 
         self.stream.start_stream()
 
-        logger.debug(f"Audio info: {self.stream.audio_data.name}, {self.stream.audio_data.samplerate},"
-                     f"{self.stream.audio_data.format}")
-
         self.mark_current_playing(audio_idx)
         self.init_playlist()
 
     def stop_cb(self):
-        self.stream.stop_stream()
+        try:
+            self.stream.stop_stream()
+        except (RuntimeError, FileNotFoundError):
+            return
 
         # store current idx
         idx_last = self.audio_list.get_selected_item_index()
@@ -243,7 +241,7 @@ class AudioPlayer:
     def update_meta(self):
         # Extract metadata
         try:
-            ordered = extract_metadata(self.abs_dir(self.current_track))
+            ordered = extract_metadata(self.abs_dir(self.selected_idx))
         except IndexError:
             return
 
@@ -287,13 +285,14 @@ class AudioPlayer:
     def digit(int_):
         return len(str(int_))
 
-    def show_progress(self, audio_file, current_frame, duration):
+    def show_progress(self, audio_info: SoundModule.AudioInfo, current_frame):
         # TODO: use py-cui builtin progress bar instead.
 
         # counting in some marginal errors of mismatching frames and total frames count.
-        file_name = audio_file.name
-        max_frame = audio_file.frames
-        format_specifier = f"0{self.digit(duration) + 2}.1f"
+        file_name = audio_info.title
+        max_frame = audio_info.total_frame
+        duration = audio_info.duration_tag
+        format_specifier = f"0{self.digit(duration)}.1f"
         self.write_info(f"[{current_frame * duration / max_frame:{format_specifier}}/{duration}] "
                         f"Playing now - {file_name}")
 
@@ -306,7 +305,7 @@ class AudioPlayer:
         # https://engineering.atspotify.com/2014/02/28/how-to-shuffle-songs/
 
         cycle_gen = itertools.cycle(array.array('i', (n for n in range(len(self.files)))))
-        self.current_play_generator = itertools.dropwhile(lambda x: x <= self.current_idx, cycle_gen)
+        self.current_play_generator = itertools.dropwhile(lambda x: x <= self.selected_idx, cycle_gen)
 
         logger.debug(f"Initialized playlist generator.")
 
@@ -323,22 +322,26 @@ class AudioPlayer:
         return abs_y - self.usable_offset_y, abs_x - self.usable_offset_x
 
     @property
-    def current_idx(self) -> int:
+    def selected_idx(self) -> int:
         return self.audio_list.get_selected_item_index()
 
     @property
-    def current_track(self) -> str:
-        return self.files[self.current_idx]
+    def selected_track(self) -> str:
+        return self.files[self.selected_idx]
 
-    @staticmethod
-    def abs_dir(file_name):
+    @property
+    def currently_playing(self) -> int:
+        file_name = self.stream.audio_info.title
+        return self.files.index(file_name)
+
+    def abs_dir(self, idx):
         # noinspection PyUnresolvedReferences
-        return join(fetch_files.cached_location, file_name)  # dirty trick
+        return join(fetch_files.cached_location, self.files[idx])  # dirty trick
 
 
 def draw_player():
     root = py_cui.PyCUI(5, 5)
-    root.set_refresh_timeout(0.33)  # this don't have to be a second.
+    root.set_refresh_timeout(0.1)  # this don't have to be a second.
     root.set_title(f"CUI Audio Player - v{VERSION_TAG}")
     player_ref = AudioPlayer(root)
 
