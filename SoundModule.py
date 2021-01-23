@@ -112,7 +112,7 @@ class StreamStoppedState(StreamState):
 
     @staticmethod
     def start_stream(stream_manager: "StreamManager"):
-        logger.debug("Starting Stream")
+        logger.debug("Starting Stream.")
         try:
             stream_manager.stream.start()
         except Exception as err:
@@ -123,19 +123,21 @@ class StreamStoppedState(StreamState):
 
     @staticmethod
     def load_stream(stream_manager: "StreamManager", audio_dir: str):
+        logger.debug("Loading new file.")
         AudioUnloadedState.load_stream(stream_manager, audio_dir)
 
 
 class StreamPlayingState(StreamState):
     @staticmethod
     def stop_stream(stream_manager: "StreamManager"):
-        logger.debug("Stopping Stream")
+        logger.debug("Stopping Stream and resetting playback progress.")
         stream_manager.stream.stop()
-        stream_manager.new_state(StreamStoppedState)
+        stream_manager.audio_info.loaded_data.seek(0)
+        # AudioUnloadedState.load_stream(stream_manager, stream_manager.audio_info.audio_dir)
 
     @staticmethod
     def pause_stream(stream_manager: "StreamManager"):
-        logger.debug("Pausing Stream")
+        logger.debug("Pausing Stream.")
         stream_manager.stream.stop()
         stream_manager.new_state(StreamPausedState)
 
@@ -147,7 +149,9 @@ class StreamPlayingState(StreamState):
 
     @staticmethod
     def load_stream(stream_manager: "StreamManager", audio_dir: str):
-        pass
+        logger.debug("Stopping and loading new audio.")
+        StreamPlayingState.stop_stream(stream_manager)
+        AudioUnloadedState.load_stream(stream_manager, audio_dir)
 
 
 class StreamPausedState(StreamState):
