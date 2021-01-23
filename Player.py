@@ -124,9 +124,6 @@ def fit_to_actual_width(text: str, length_lim: int) -> str:
 # UI definition, using py-cui examples. Would've been nice if it followed PEP8.
 
 
-# TODO: detect sounddevice change and update accordingly
-# TODO: add unittest
-# TODO: audio finished event handling
 class AudioPlayer:
     ellipsis_ = ".."  # 3 dots 2 long
     usable_offset_y, usable_offset_x = 2, 6  # Excl. Border, Spacing of widget from abs size.
@@ -174,9 +171,11 @@ class AudioPlayer:
         self.reload_cb()
 
     # Media control callback definitions -----------------------
+    # TODO: fix malfunctioning play next when force-starting different tracks mid-playing.
 
     def play_cb(self):
         try:
+            self.continue_playing = False
             self.stream.pause_stream()  # assuming State: Paused
             self.mark_as_paused(self.currently_playing)
         except RuntimeError:
@@ -206,6 +205,7 @@ class AudioPlayer:
         self.init_playlist()
 
     def stop_cb(self):
+        self.continue_playing = False  # need this before final callback is called, what a mess.
         try:
             self.stream.stop_stream()
         except (RuntimeError, FileNotFoundError):
@@ -234,7 +234,6 @@ class AudioPlayer:
         self.write_audio_list(lazy_line_gen)
 
         self.write_info(f"Found {len(self.files)} file(s).")
-        # TODO: maintain original item if possible, then move update_meta call to reload_cb.
 
     def reload_cb(self):
         self.stop_cb()
@@ -255,7 +254,6 @@ class AudioPlayer:
 
         self.write_meta_list(audio_list_str_gen(ordered))
 
-    # TODO: create branch to implement full-color support for py_cui.
     # Implementation / helper / wrappers -----------------------
 
     def write_info(self, text: str):
@@ -288,10 +286,10 @@ class AudioPlayer:
     def mark_as_playing(self, track_idx):
         self.continue_playing = True
 
-        if self.stream.stream_state == SoundModule.StreamPausedState:
-            self.mark_target(track_idx, self.symbols["pause"], self.symbols["play"])
+        # if self.stream.stream_state == SoundModule.StreamPausedState:
+        #     self.mark_target(track_idx, self.symbols["pause"], self.symbols["play"])
 
-        elif self.stream.stream_state == SoundModule.StreamStoppedState:
+        if self.stream.stream_state == SoundModule.StreamStoppedState:
             self.mark_target(track_idx, self.symbols["stop"], self.symbols["play"])
         else:
             self.mark_target(track_idx, "|", self.symbols["play"])
@@ -302,7 +300,8 @@ class AudioPlayer:
             self.continue_playing = False
             self.mark_target(track_idx, self.symbols["play"], self.symbols["pause"])
         else:
-            self.mark_as_playing(track_idx)
+            self.mark_target(track_idx, self.symbols["pause"], self.symbols["play"])
+            # This fits more to mark_as_playing, but consequences does not allow to do so, for now.
 
     def mark_as_stopped(self, track_idx):
         self.continue_playing = False
