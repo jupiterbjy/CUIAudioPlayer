@@ -1,173 +1,73 @@
 import sounddevice as sd
 import soundfile as sf
-import threading
 import itertools
-from tinytag import TinyTag, Ogg, ID3, Flac, Wave
-from typing import Callable, Tuple, Union
+from tinytag import TinyTag
+from typing import Callable, Type
 
 from LoggingConfigurator import logger
 
 
-# TODO: add logging tab with stacked widget or something
-def play_audio(
-    audio_location: str,
-    stream_callback: Callable = None,
-    finished_callback: Callable = None,
-):
-    # Really want to run this in event loop, that's sad.
-    """
-    Intended to run on threads, to not block curses loops.
+class StreamState:
+    @staticmethod
+    def start_stream(stream_manager: "StreamManager"):
+        raise NotImplementedError()
 
-    :param audio_location: Location of audio file in str
-    :param stream_callback:
-    :param finished_callback:
-    :return:
-    """
+    @staticmethod
+    def stop_stream(stream_manager: "StreamManager"):
+        raise NotImplementedError()
 
-    event_ = threading.Event()
+    @staticmethod
+    def pause_stream(stream_manager: "StreamManager"):
+        raise NotImplementedError()
 
-    if stream_callback is None:
-
-        def stream_callback():
-            pass
-
-    if finished_callback is None:
-
-        def finished_callback():
-            pass
-
-    def finish_cb() -> None:
-        finished_callback()
-        event_.set()
-
-    with sf.SoundFile(audio_location) as audio_fp:
-        last_frame = -1
-        dtype = sd.default.dtype[1]
-
-        def callback(data_out, frames: int, time, status: sd.CallbackFlags) -> None:
-            nonlocal last_frame
-
-            assert not status
-            assert last_frame != (current_frame := audio_fp.tell())
-
-            last_frame = current_frame
-
-            audio_fp.buffer_read_into(data_out, dtype)
-            stream_callback()
-
-        with sd.OutputStream(
-            samplerate=audio_fp.samplerate,
-            channels=audio_fp.channels,
-            callback=callback,
-            finished_callback=finish_cb,
-        ):
-            event_.wait()
+    @staticmethod
+    def load_stream(stream_manager: "StreamManager", audio_dir: str):
+        raise NotImplementedError()
 
 
-def play_audio_not_safe(
-    audio_location: str,
-    stream_callback: Callable = None,
-    finished_callback: Callable = None,
-) -> Tuple[sf.SoundFile, sd.OutputStream]:
-    # Really want to run this in event loop, that's sad.
-    """
-    Intended to run normally in main threads.
-    User should make sure to close and drop reference for gc on both of returns.
+class AudioUnloadedState(StreamState):
+    @staticmethod
+    def start_stream(stream_manager: "StreamManager"):
+        raise RuntimeError("No audio file is loaded.")
 
-    :param audio_location: Location of audio file in str
-    :param stream_callback:
-    :param finished_callback:
-    :return: sf.SoundFile, sd.OutputStream
-    """
+    @staticmethod
+    def stop_stream(stream_manager: "StreamManager"):
+        raise RuntimeError("No audio file is loaded.")
 
-    if stream_callback is None:
+    @staticmethod
+    def pause_stream(stream_manager: "StreamManager"):
+        raise RuntimeError("No audio file is loaded.")
 
-        def stream_callback(audio_file, frames):
-            pass
+    @staticmethod
+    def load_stream(stream_manager: "StreamManager", audio_dir: str):
+        # noinspection PyAttributeOutsideInit
+        try:
+            stream_manager.audio_info = AudioInfo(sf.SoundFile(audio_dir))
+        except Exception as err:
+            logger.critical(f"Failed to load <{audio_dir}>!")
+            raise err
 
-    if finished_callback is None:
+        # noinspection PyAttributeOutsideInit
+        stream_manager.stream = sd.OutputStream(
+            samplerate=stream_manager.audio_info.loaded_data.samplerate,
+            channels=stream_manager.audio_info.loaded_data.channels,
+            callback=AudioUnloadedState.stream_callback_closure(stream_manager),
+            finished_callback=AudioUnloadedState.finished_callback_wrapper(stream_manager),
+        )
 
-        def finished_callback():
-            pass
+        stream_manager.new_state(StreamStoppedState)
 
-    def finish_cb() -> None:
-        logger.debug("Playback finished.")
-        audio_fp.close()
-        finished_callback()
-
-    audio_fp = sf.SoundFile(audio_location)
-
-    def wrapper():
-        # gather names closer to callback function in the hope of reducing call overhead.
-
-        last_frame = -1
-        audio_file = audio_fp
-        dtype = sd.default.dtype[1]
-        duration = int(TinyTag.get(audio_location).as_dict()['duration'])
-        next_callback_run = 3
-
-        def callback(data_out, frames: int, time, status: sd.CallbackFlags) -> None:
-            nonlocal last_frame, stream_callback, next_callback_run
-
-            assert not status
-            # assert last_frame != (current_frame := audio_fp.tell())
-            try:
-                if last_frame == (current_frame := audio_file.tell()):
-                    raise sd.CallbackStop
-            except RuntimeError as err:
-                raise sd.CallbackStop from err
-
-            last_frame = current_frame
-
-            audio_file.buffer_read_into(data_out, dtype)
-            if next_callback_run == 0:
-                stream_callback(audio_fp, current_frame, duration)
-                next_callback_run = 3
-            else:
-                next_callback_run -= 1
-            # Stream callback signature for other functions
-
-        return callback
-
-    stream = sd.OutputStream(
-        samplerate=audio_fp.samplerate,
-        channels=audio_fp.channels,
-        callback=wrapper(),
-        finished_callback=finish_cb,
-    )
-
-    return audio_fp, stream
-
-
-class StreamManager:
-    def __init__(self, stream_callback: Callable = None, finished_callback: Callable = None, callback_every_n=3):
-        self.audio_dir = ""
-        self.callback_minimum_cycle = callback_every_n
-
-        self.stream_cb = stream_callback if stream_callback else lambda x, y, z: None
-        self.finished_cb = finished_callback if finished_callback else lambda: None
-
-        self.audio_data: sf.SoundFile = None
-        self.tag_data: Union[TinyTag, ID3, Ogg, Wave, Flac] = None
-
-        self.total_frame: int = None
-        self.duration_tag: int = None
-
-        self.stream: sd.OutputStream = None
-        self.abort = False
-        self.paused = False
-        self.playing = False
-
-    def stream_callback_closure(self) -> Callable:
+    @staticmethod
+    def stream_callback_closure(stream_manager: "StreamManager") -> Callable:
         # Collecting names here to reduce call overhead.
         last_frame = -1
         dtype = sd.default.dtype[1]
-        audio_ref = self.audio_data
+        audio_ref = stream_manager.audio_info.loaded_data
         channel = audio_ref.channels
-        callback = self.stream_cb
-        duration = self.duration_tag
+        callback = stream_manager.stream_cb
+        audio_info = stream_manager.audio_info
 
-        cycle = itertools.cycle((not n for n in range(self.callback_minimum_cycle)))
+        cycle = itertools.cycle((not n for n in range(stream_manager.callback_minimum_cycle)))
         # to reduce load, custom callback will be called every n-th iteration of this generator.
 
         def stream_cb(data_out, frames: int, time, status: sd.CallbackFlags) -> None:
@@ -179,84 +79,148 @@ class StreamManager:
                 data_out[written:] = [[0.0] * channel for _ in range(frames - written)]
                 raise sd.CallbackStop
 
-            if last_frame == (current_frame := audio_ref.tell()) or self.abort:
+            if last_frame == (current_frame := audio_ref.tell()):
                 raise sd.CallbackAbort
 
             last_frame = current_frame
 
             if next(cycle):
-                callback(audio_ref, current_frame, duration)
+                callback(audio_info, current_frame)
                 # Stream callback signature for user-supplied callbacks
                 # Providing current_frame and duration to reduce call overhead from user-callback side.
 
         return stream_cb
 
-    def finished_callback_wrapper(self):
-        logger.debug(f"Playback finished. State:{'Abort' if self.abort else 'Finished'}")
-        self.playing = False
+    @staticmethod
+    def finished_callback_wrapper(stream_manager: "StreamManager"):
+        def callback():
+            logger.debug(f"Playback finished.")
+            stream_manager.new_state(StreamStoppedState)
+            stream_manager.finished_cb()
 
-        if self.paused:
-            return
+        return callback
 
-        self.audio_data.close()
-        if not self.abort:
-            self.finished_cb()
 
-        # WHY THIS IS NOT CALLED?????
+class StreamStoppedState(StreamState):
+    @staticmethod
+    def stop_stream(stream_manager: "StreamManager"):
+        raise RuntimeError("Stream is not active.")
 
-    def load_new_stream(self, audio_location):
-        self.audio_dir = audio_location
+    @staticmethod
+    def pause_stream(stream_manager: "StreamManager"):
+        raise RuntimeError("Stream is not active.")
 
-        self.audio_data = sf.SoundFile(self.audio_dir)
+    @staticmethod
+    def start_stream(stream_manager: "StreamManager"):
+        logger.debug("Starting Stream")
+        try:
+            stream_manager.stream.start()
+        except Exception as err:
+            logger.critical(f"Got {type(err)}")
+            raise
+        else:
+            stream_manager.new_state(StreamPlayingState)
+
+    @staticmethod
+    def load_stream(stream_manager: "StreamManager", audio_dir: str):
+        AudioUnloadedState.load_stream(stream_manager, audio_dir)
+
+
+class StreamPlayingState(StreamState):
+    @staticmethod
+    def stop_stream(stream_manager: "StreamManager"):
+        logger.debug("Stopping Stream")
+        stream_manager.stream.stop()
+        stream_manager.new_state(StreamStoppedState)
+
+    @staticmethod
+    def pause_stream(stream_manager: "StreamManager"):
+        logger.debug("Pausing Stream")
+        stream_manager.stream.stop()
+        stream_manager.new_state(StreamPausedState)
+
+    @staticmethod
+    def start_stream(stream_manager: "StreamManager"):
+        raise RuntimeError("Stream already running.")
+        # Might need a better choice here. Merging with pause_stream or not.
+        # I guess implementing `stop and play this instead` would be better done UI class side.
+
+    @staticmethod
+    def load_stream(stream_manager: "StreamManager", audio_dir: str):
+        pass
+
+
+class StreamPausedState(StreamState):
+    @staticmethod
+    def stop_stream(stream_manager: "StreamManager"):
+        logger.debug("Delegating to: StreamPlayingState.stop_stream")
+        StreamPlayingState.stop_stream(stream_manager)
+
+    @staticmethod
+    def pause_stream(stream_manager: "StreamManager"):
+        logger.debug("Resuming Stream")
+        stream_manager.new_state(StreamPlayingState)
+        stream_manager.stream.start()
+
+    @staticmethod
+    def start_stream(stream_manager: "StreamManager"):
+        raise RuntimeError("Stream is paused, stop stream first.")
+
+    @staticmethod
+    def load_stream(stream_manager: "StreamManager", audio_dir: str):
+        pass
+
+
+class AudioInfo:
+    def __init__(self, audio_fp: sf.SoundFile):
+        self.loaded_data = audio_fp
+
+        self.audio_dir = audio_fp.name
+        self.total_frame = audio_fp.frames
         self.tag_data = TinyTag.get(self.audio_dir)
 
-        self.total_frame = self.audio_data.frames
-        self.duration_tag = round(self.tag_data.duration)
+        # saving reference for tiny bit faster access
+        self.duration_tag = self.tag_data.duration
+        self.title = self.tag_data.title
 
-        self.abort = False
+    def __del__(self):
+        self.loaded_data.close()
 
-        self.stream = sd.OutputStream(
-            samplerate=self.audio_data.samplerate,
-            channels=self.audio_data.channels,
-            callback=self.stream_callback_closure(),
-            finished_callback=self.finished_callback_wrapper,
-        )
+
+class StreamManager:
+    def __init__(self, stream_callback: Callable = None, finished_callback: Callable = None, callback_every_n=3):
+        self.callback_minimum_cycle = callback_every_n
+
+        self.stream_cb = stream_callback if stream_callback else lambda audio_info, current_frame: None
+        self.finished_cb = finished_callback if finished_callback else lambda: None
+
+        # noinspection PyTypeChecker
+        self.audio_info: AudioInfo = None
+
+        # noinspection PyTypeChecker
+        self.stream: sd.OutputStream = None
+
+        self.stream_state = AudioUnloadedState
+
+    def new_state(self, status: Type[StreamState]):
+        logger.debug(f"Switching state: {self.stream_state} -> {status}")
+        self.stream_state = status
+
+    def load_new_stream(self, audio_location):
+        return self.stream_state.load_stream(self, audio_location)
 
     def start_stream(self):
-        logger.debug("Starting Stream")
-        if self.playing:
-            return
-
-        self.abort = False
-        self.playing = True
-        self.stream.start()
+        return self.stream_state.start_stream(self)
 
     def stop_stream(self):
-        logger.debug("Stopping Stream")
-        self.abort = True
-        try:  # Not sure why this is triggered first.
-            self.stream.stop()
-        except AttributeError:
-            pass
+        return self.stream_state.stop_stream(self)
 
     def pause_stream(self):
-        # TODO: remember the playback position, then start stream since then!
-        # self.paused = not self.paused
-
-        if self.paused and not self.stream.active:
-            self.playing = True
-            self.paused = False
-            self.stream.start()
-        elif not self.paused and self.stream.active:
-            self.paused = True
-            self.stream.stop()
-
-        logger.debug(f"Paused: {self.paused} / Stream: {self.stream.active}")
+        return self.stream_state.pause_stream(self)
 
     def __del__(self):
         try:
-            self.stop_stream()
-            self.audio_data.close()
+            self.stream_state.stop_stream(self)
         except AttributeError:
             pass
 
