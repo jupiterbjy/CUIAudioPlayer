@@ -1,5 +1,4 @@
 import sounddevice as sd
-import soundfile as sf
 import py_cui
 import array
 import functools
@@ -9,12 +8,12 @@ from tinytag import TinyTag
 from wcwidth import wcswidth, wcwidth
 from sys import platform
 from os import listdir
-from os.path import abspath, dirname, join, split
+from os.path import dirname, join, split
 from typing import Callable, Mapping, Generator, Iterable, Tuple, List
 
 from LoggingConfigurator import logger
 import CompatibilityPatch
-import SoundModule
+from SDManager import StreamManager, StreamStates
 
 try:
     # noinspection PyUnresolvedReferences
@@ -129,7 +128,7 @@ class AudioPlayer:
     usable_offset_y, usable_offset_x = 2, 6  # Excl. Border, Spacing of widget from abs size.
     next_audio_delay = 1  # not sure yet how to implement this in main thread without spawning one.
 
-    symbols = {"play": "▶", "pause": "⏸", "stop": "⏹"}
+    symbols = {"play": "⏵", "pause": "⏸", "stop": "⏹"}
 
     # EXPECTING 5, 3 Layout!
 
@@ -166,7 +165,7 @@ class AudioPlayer:
         self.shuffle = False
         self.continue_playing = False
 
-        self.stream: SoundModule.StreamManager = SoundModule.StreamManager(self.show_progress, self.play_next)
+        self.stream: StreamManager.StreamManager = StreamManager.StreamManager(self.show_progress, self.play_next)
 
         self.reload_cb()
 
@@ -289,13 +288,13 @@ class AudioPlayer:
         # if self.stream.stream_state == SoundModule.StreamPausedState:
         #     self.mark_target(track_idx, self.symbols["pause"], self.symbols["play"])
 
-        if self.stream.stream_state == SoundModule.StreamStoppedState:
+        if self.stream.stream_state == StreamStates.StreamStoppedState:
             self.mark_target(track_idx, self.symbols["stop"], self.symbols["play"])
         else:
             self.mark_target(track_idx, "|", self.symbols["play"])
 
     def mark_as_paused(self, track_idx):
-        if self.stream.stream_state == SoundModule.StreamPausedState:
+        if self.stream.stream_state == StreamStates.StreamPausedState:
 
             self.continue_playing = False
             self.mark_target(track_idx, self.symbols["play"], self.symbols["pause"])
@@ -306,7 +305,7 @@ class AudioPlayer:
     def mark_as_stopped(self, track_idx):
         self.continue_playing = False
 
-        if self.stream.stream_state == SoundModule.StreamPausedState:
+        if self.stream.stream_state == StreamStates.StreamPausedState:
             self.mark_target(track_idx, self.symbols["pause"], self.symbols["stop"])
         else:
             self.mark_target(track_idx, self.symbols["play"], self.symbols["stop"])
@@ -319,7 +318,7 @@ class AudioPlayer:
     def digit(int_):
         return len(str(int_))
 
-    def show_progress(self, audio_info: SoundModule.AudioInfo, current_frame):
+    def show_progress(self, audio_info: StreamManager.AudioInfo, current_frame):
         # TODO: use py-cui builtin progress bar instead.
 
         # counting in some marginal errors of mismatching frames and total frames count.
@@ -378,7 +377,7 @@ class AudioPlayer:
 
 def draw_player():
     root = py_cui.PyCUI(5, 5)
-    root.set_refresh_timeout(0.1)  # this don't have to be a second.
+    root.set_refresh_timeout(0.1)  # this don't have to be a second. Might be an example of downside of ABC
     root.set_title(f"CUI Audio Player - v{VERSION_TAG}")
     player_ref = AudioPlayer(root)
 
