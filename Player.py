@@ -184,7 +184,7 @@ class AudioPlayer:
             # State: Unloaded
             self.play_stream()
 
-    def play_stream(self, audio_idx=None):
+    def play_stream(self, audio_idx=None) -> bool:
         if not audio_idx:
             audio_idx = self.selected_idx
 
@@ -192,16 +192,18 @@ class AudioPlayer:
             self.stream.load_stream(self.abs_dir(audio_idx))
         except IndexError:
             logger.debug(f"Invalid idx: {audio_idx} / {len(self.files)}")
-            return
+            return False
 
         except RuntimeError as err:
             self.write_info(f"ERR: {str(err).split(':')[-1]}")
-            return
+            return False
 
         self.refresh_list(False)
         self.stream.start_stream()
         self.mark_as_playing(audio_idx)
         self.init_playlist()
+
+        return True
 
     def stop_cb(self):
         self.continue_playing = False  # need this before final callback is called, what a mess.
@@ -338,7 +340,11 @@ class AudioPlayer:
         # https://engineering.atspotify.com/2014/02/28/how-to-shuffle-songs/
 
         cycle_gen = itertools.cycle(array.array('i', (n for n in range(len(self.files)))))
-        self.current_play_generator = itertools.dropwhile(lambda x: x <= self.currently_playing, cycle_gen)
+        for _ in range(self.currently_playing + 1):
+            next(cycle_gen)
+
+        self.current_play_generator = cycle_gen
+        # self.current_play_generator = itertools.dropwhile(lambda x: x <= self.currently_playing, cycle_gen)
 
         logger.debug(f"Initialized playlist generator.")
 
@@ -349,7 +355,9 @@ class AudioPlayer:
             next_ = next(self.current_play_generator)
             logger.debug(f"Playing Next - {next_}")
 
-            self.play_stream(next_)
+            if not self.play_stream(next_):
+                logger.warning("Error playing next track. Moving on.")
+                self.play_next()
 
     # UI related -----------------------------------------------
 
