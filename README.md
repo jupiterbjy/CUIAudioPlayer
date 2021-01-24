@@ -5,30 +5,41 @@ Just a tiny project to create a script that literally does its name.
 Only working configurations are Linux Terminal / CMD / Windows Terminal + WSL.
 Will show as broken on other configurations on Win10.
 
+Although this project strictly follow PEP8 at best, readability might not.
+
 *0.0.2a - 2x speed*  
 ![](Demo/Images/Demo.webp)
 
 ---
 ## Background
 
+This tiny project has goal of learning followings:
+ - Modules
+   - [py_cui](https://github.com/jwlodek/py_cui)
+   - [py-sounddevice](https://github.com/spatialaudio/python-sounddevice)
+   - [tinytag](https://github.com/devsnd/tinytag)
+ - 
+
 Originally meant to create a testing bed for learning *sounddevice* module for use in project
-[VirtualTrans](github.com/jupiterbjy/VirtualTrans), turns out to be this was pretty challenging and fun.
+ future projects inside [ProjectIncubator](github.com/jupiterbjy/ProjectIncubator), turns out that this module is
+awesome. I'm having tons of fun with it.
 
-Therefore, I've changed *VirtualTrans* repo to *ProjectIncubator*, and separated this using ```subtree split```.
+Therefore, from *ProjectIncubator* I separated this using ```subtree split``` - totally a neat feature.
 
-As I find newly discovered [py_cui](https://github.com/jwlodek/py_cui) promising and suits my tastes a lot,
-I'm going to finish this project as usable-state unlike my other repos.
+Additionally, I find [py_cui](https://github.com/jwlodek/py_cui) promising and suits my tastes a lot,
+I decided to create a repo utilizing both.
 
-Plus, this will be my first repo using git features like milestones, issue, etc -
-probably I'll be only one using the latter tho.
+Plus, this will be my first repo trying out git features such as milestones, issue, etc.
 
 ---
 ## Status
 
-This impressive pre-stone-age program does whopping 4 actions:
+This impressive pre-stone-age program does:
 - refresh audio list
 - show *part* of metadata (No joke!)
-- play & stop, broken pause
+- play & stop, half-broken pause.
+
+that's all.
 
 ---
 ## Planned features
@@ -54,25 +65,26 @@ Will mark those if it's implemented.
   This is caused by some 2-digit characters such as some unicode symbols or CJK letters.
   For now, I used *wcwidth* module to determine actual string length and add trailing ZWSP on each of those letters.
   With actual length and *len()* length now matches, and by slicing and striping outcome - py_cui now don't break up
-  like above.
+  like above, at least on certain environments - as shown below.
  
-### Terrible support of curses on various environment with inconsistent ZWSP and string legnth.
-  ![](Demo/Images/trouble_1.png)  
-  Example footage of curses module at finest. Actually I didn't write like that to pad 2-width chars.
- 
-  This is primary reason why I am using bare CMD mostly. Spent about weeks on this issue yet to find a working
-  terminal on win10. Although this also works on WSL2 with MS Terminal, I can't have a playback there yet.  
- 
-
-Either they just don't respond to all the inputs with *py_cui*,  others just don't have proper supports on
-  Zero-Width SPace - aka ZWSP - so it breaks all the outputs. I might be better check if I can fix this on
-  *py_cui* side, might become somewhat dirty if ever I did.
-
 ### Dynamic updating of texts
-  As I cut off outputs to prevent py_cui to break, layouts, I need to make a way to remember each lines and cycle per
-  line basis to let your see full name of the file. Without help of event loops like *trio*, I'm not quite sure how I
-  am supposed to implement it so far.
+  As I shorten each lines for each widget to prevent py_cui breaking like above, layouts, I need to make a way to
+  remember each lines and cycle per line basis to let your see full name of the file. Without help of event loops like
+  *trio*, this might get non-straightforward and complicated to implement it.
 
+### Inconsistent ZWSP and string legnth on Win10 environment
+  ![](Demo/Images/trouble_1.png)  
+  Example footage of curses module at finest. Actually I should pad string in reverse order, but just for an example.
+ 
+  I eventually failed to satisfy *sounddevice*'s dependency - *PortAudio* - on *WSL2*, and since my linux server is
+  headless & tongueless, I can't test there either. This is primary reason why I am using bare CMD mostly. 
+
+  Tested out all the terminals I can find for Win10, but none of them have consistent output like real linux terminal. 
+  The only working combination is *WSL2* + *Windows Terminal* or pure *CMD*. *CMD* + *Windows Terminal*
+  can't handle ZWSP either. Since I can't use *sounddevice* on linux yet - until I implement server-client,
+  configuration I amd stuck with CMD. I might be better check if I can fix this on
+  *py_cui* side, might become somewhat dirty if I ever managed to do so.
 
 ### Understanding how callback works in sounddevice.OutputStream
   To see how dumb I am - check [this](https://github.com/spatialaudiKo/python-sounddevice/issues/306) out.
+  Huge thanks to dev!
