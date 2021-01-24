@@ -5,9 +5,11 @@ import threading
 
 def start_audio_stream(audio_file):
     event_ = threading.Event()
+    modifier_mul = 2
+    modifier_add = 0
 
-    def finish_cb(*args):
-        print("Stopped! ", args)
+    def finish_cb():
+        print("Stopped!")
         event_.set()
 
     with sf.SoundFile(audio_file) as audio:
@@ -16,15 +18,15 @@ def start_audio_stream(audio_file):
 
         def callback(data_out, frames: int, time, status: sd.CallbackFlags) -> None:
             nonlocal last_frame
-
             assert not status
 
-            read = audio.buffer_read_into(data_out, sd.default.dtype[1])
+            data_out[:] = audio.read(frames, fill_value=0) * modifier_mul
 
-            assert last_frame != (current_frame := audio.tell())
+            if last_frame == (current_frame := audio.tell()):
+                raise sd.CallbackAbort
 
             last_frame = current_frame
-            print(frames, read, last_frame, audio.frames)
+            print(frames, current_frame, audio.frames, modifier_mul, modifier_add)
 
         with sd.OutputStream(
             samplerate=audio.samplerate,
