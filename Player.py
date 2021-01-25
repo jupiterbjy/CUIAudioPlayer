@@ -130,18 +130,25 @@ class AudioPlayer:
 
     symbols = {"play": "⏵", "pause": "⏸", "stop": "⏹"}
 
-    # EXPECTING 5, 3 Layout!
+    # EXPECTING 5, 7 Layout!
 
     def __init__(self, root: py_cui.PyCUI):
         self.root_ = root
 
         # row-idx then col-idx, it's reversed x,y - reminder to self!
-        self.audio_list = self.root_.add_scroll_menu("Files", 0, 0, column_span=3, row_span=3)
-        self.meta_list = self.root_.add_scroll_menu("Meta", 0, 3, column_span=2, row_span=5)
-        self.info_box = self.root_.add_text_box("Info", 3, 0, column_span=3)
+        self.audio_list = self.root_.add_scroll_menu("Files", 0, 0, column_span=5, row_span=3)
+        self.meta_list = self.root_.add_scroll_menu("Meta", 0, 5, column_span=2, row_span=5)
+
+        self.info_box = self.root_.add_text_box("Info", 3, 0, column_span=4)
+        self.volume_box = self.root_.add_slider("Volume", 3, 4, column_span=1, min_val=0, max_val=8, init_val=4)
+        self.handle_volume_patch()
+
         self.play_btn = self.root_.add_button("Play", 4, 0, command=self.play_cb)
         self.stop_btn = self.root_.add_button("Stop", 4, 1, command=self.stop_cb)
         self.reload_btn = self.root_.add_button("Reload", 4, 2, command=self.reload_cb)
+
+        self.reserved_1 = self.root_.add_button("reserved", 4, 3)
+        self.reserved_2 = self.root_.add_button("reserved", 4, 4)
 
         # just for ease of clearing
         self.clear_target = [self.audio_list, self.meta_list, self.info_box]
@@ -163,7 +170,6 @@ class AudioPlayer:
         self.files: List[str] = []
         self.current_play_generator = None
         self.shuffle = False
-        self.continue_playing = False
 
         self.stream: StreamManager.StreamManager = StreamManager.StreamManager(self.show_progress, self.play_next)
 
@@ -174,7 +180,7 @@ class AudioPlayer:
 
     def play_cb(self):
         try:
-            self.continue_playing = False
+            self.stream.error_flag = False
             self.stream.pause_stream()  # assuming State: Paused
             self.mark_as_paused(self.currently_playing)
         except RuntimeError:
@@ -206,7 +212,7 @@ class AudioPlayer:
         return True
 
     def stop_cb(self):
-        self.continue_playing = False  # need this before final callback is called, what a mess.
+        self.stream.error_flag = False  # need this before final callback is called, what a mess.
         try:
             self.stream.stop_stream()
         except (RuntimeError, FileNotFoundError):
@@ -255,6 +261,15 @@ class AudioPlayer:
 
         self.write_meta_list(audio_list_str_gen(ordered))
 
+    def handle_volume_patch(self):
+        original = self.volume_box._handle_key_press
+
+        def handler(handle_key_press):
+            original(handle_key_press)
+            self.stream.multiplier = self.stream.step * self.volume_box.get_slider_value()
+
+        self.volume_box._handle_key_press = handler
+
     # Implementation / helper / wrappers -----------------------
 
     def write_info(self, text: str):
@@ -285,7 +300,7 @@ class AudioPlayer:
         self.write_audio_list(source)
 
     def mark_as_playing(self, track_idx):
-        self.continue_playing = True
+        self.stream.error_flag = True
 
         # if self.stream.stream_state == SoundModule.StreamPausedState:
         #     self.mark_target(track_idx, self.symbols["pause"], self.symbols["play"])
@@ -298,14 +313,14 @@ class AudioPlayer:
     def mark_as_paused(self, track_idx):
         if self.stream.stream_state == StreamStates.StreamPausedState:
 
-            self.continue_playing = False
+            self.stream.error_flag = False
             self.mark_target(track_idx, self.symbols["play"], self.symbols["pause"])
         else:
             self.mark_target(track_idx, self.symbols["pause"], self.symbols["play"])
             # This fits more to mark_as_playing, but consequences does not allow to do so, for now.
 
     def mark_as_stopped(self, track_idx):
-        self.continue_playing = False
+        self.stream.error_flag = False
 
         if self.stream.stream_state == StreamStates.StreamPausedState:
             self.mark_target(track_idx, self.symbols["pause"], self.symbols["stop"])
@@ -349,9 +364,10 @@ class AudioPlayer:
         logger.debug(f"Initialized playlist generator.")
 
     def play_next(self):
-        logger.debug(f"Condition: {self.continue_playing}")
+        # There's no way to stop this when error is on UI side
+        logger.debug(f"Condition: {self.stream.error_flag}")
 
-        if self.continue_playing:
+        if self.stream.error_flag:
             next_ = next(self.current_play_generator)
             logger.debug(f"Playing Next - {next_}")
 
@@ -384,7 +400,7 @@ class AudioPlayer:
 
 
 def draw_player():
-    root = py_cui.PyCUI(5, 5)
+    root = py_cui.PyCUI(5, 7)
     root.set_refresh_timeout(0.1)  # this don't have to be a second. Might be an example of downside of ABC
     root.set_title(f"CUI Audio Player - v{VERSION_TAG}")
     player_ref = AudioPlayer(root)

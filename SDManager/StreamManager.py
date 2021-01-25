@@ -18,7 +18,11 @@ class StreamManager:
         # noinspection PyTypeChecker
         self.stream: sd.OutputStream = None
 
+        self.multiplier = 1
+        self.volume_range = 0, 2
+        self.step = 0.25
         self.stream_state = AudioUnloadedState
+        self.error_flag = False
 
     def new_state(self, status: Type[StreamState]):
         logger.debug(f"Switching state: {self.stream_state} -> {status}")
@@ -35,6 +39,14 @@ class StreamManager:
 
     def pause_stream(self):
         return self.stream_state.pause_stream(self)
+
+    def volume_up(self):
+        if (n := self.multiplier + self.step) <= self.volume_range[1]:
+            self.multiplier = n
+
+    def volume_down(self):
+        if (n := self.multiplier - self.step) >= self.volume_range[0]:
+            self.multiplier = n
 
     def __del__(self):
         try:

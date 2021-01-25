@@ -2,7 +2,7 @@ import abc
 import sounddevice as sd
 import soundfile as sf
 import tinytag
-from typing import Callable, Type, Union
+from typing import Callable, Type, Union, Tuple
 """
 This is Abstract Base classes only for typing purposes to prevent circular import.
 Even though I'm one making this, I can't remember my things without such ample IDE supports.
@@ -43,22 +43,38 @@ class StreamManager(abc.ABC):
     # Faking it into class attribute, but actually instance attribute.
     audio_info: AudioInfo
     stream: Union[sd.OutputStream, sd.RawStream]
+
     callback_minimum_cycle: int
+
     stream_cb: Callable
     finished_cb: Callable
+
     stream_state: Type[StreamState]
 
-    def new_state(self, status: Type[StreamState]):
+    multiplier: float
+    volume_range: Tuple[float, float]
+    step: float
+
+    error_flag: bool
+
+    def new_state(self, status: Type[StreamState]) -> None:
         pass
 
-    def load_stream(self, audio_location):
+    def load_stream(self, audio_location) -> None:
+        # Might need to return depending on success or failure.
         pass
 
-    def start_stream(self):
+    def start_stream(self) -> None:
         pass
 
-    def stop_stream(self):
+    def stop_stream(self) -> None:
         pass
 
-    def pause_stream(self):
+    def pause_stream(self) -> None:
+        pass
+
+    def volume_up(self) -> None:
+        pass
+
+    def volume_down(self) -> None:
         pass

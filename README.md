@@ -52,6 +52,7 @@ Will mark those if it's implemented.
     - [x] show progress - Temporarily using seconds.
     - [x] Continues play - Half broken, but works mostly.
     - [ ] Shuffle
+    - [x] Volume control (SW)
 - [ ] Album art visualizing on some sort of ascii art.
 - [ ] lrc support
 - [ ] Show freq. map

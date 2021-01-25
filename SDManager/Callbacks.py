@@ -23,7 +23,7 @@ def stream_callback_closure(stream_manager: "StreamManager", raw=False) -> Calla
         nonlocal last_frame
         assert not status
 
-        data_out[:] = audio_ref.read(frames, fill_value=0)
+        data_out[:] = audio_ref.read(frames, fill_value=0) * stream_manager.multiplier
 
         if last_frame == (current_frame := audio_ref.tell()):
             raise sd.CallbackAbort
