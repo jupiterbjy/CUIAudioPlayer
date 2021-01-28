@@ -340,8 +340,6 @@ class AudioPlayer:
         return len(str(int_))
 
     def show_progress(self, audio_info: StreamManager.AudioInfo, current_frame):
-        # TODO: use py-cui builtin progress bar instead.
-
         # counting in some marginal errors of mismatching frames and total frames count.
         file_name = audio_info.title
         max_frame = audio_info.total_frame
@@ -408,6 +406,7 @@ def draw_player():
     root.set_refresh_timeout(0.1)  # this don't have to be a second. Might be an example of downside of ABC
     root.set_title(f"CUI Audio Player - v{VERSION_TAG}")
     player_ref = AudioPlayer(root)
+    assert player_ref  # Preventing unused variable check
 
     root.start()
 

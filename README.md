@@ -53,6 +53,7 @@ Will mark those if it's implemented.
     - [x] Continues play - Half broken, but works mostly.
     - [ ] Shuffle
     - [x] Volume control (SW)
+    - [ ] Jump to section
 - [ ] Album art visualizing on some sort of ascii art.
 - [ ] lrc support
 - [ ] Show freq. map
@@ -62,8 +63,7 @@ Will mark those if it's implemented.
 ## Things to overcome / overcame
 
 ### *py_cui*'s lack of support for 2-width characters
-  ![](Demo/Images/compare_before.png)  
-  This is caused by some 2-digit characters such as some unicode symbols or CJK letters.
+  [This](Demo/Images/compare_before.png) is caused by some 2-digit characters such as some unicode symbols or CJK letters.
   For now, I used *wcwidth* module to determine actual string length and add trailing ZWSP on each of those letters.
   With actual length and *len()* length now matches, and by slicing and striping outcome - py_cui now don't break up
   like above, at least on certain environments - as shown below.
@@ -74,8 +74,8 @@ Will mark those if it's implemented.
   *trio*, this might get non-straightforward and complicated to implement it.
 
 ### Inconsistent ZWSP and string legnth on Win10 environment
-  ![](Demo/Images/trouble_1.png)  
-  Example footage of curses module at finest. Actually I should pad string in reverse order, but just for an example.
+  [Example](Demo/Images/trouble_1.png) footage of curses module at finest.  
+  Actually I should pad string in reverse order, but just for an example.
  
   I eventually failed to satisfy *sounddevice*'s dependency - *PortAudio* - on *WSL2*, and since my linux server is
   headless & tongueless, I can't test there either. This is primary reason why I am using bare CMD mostly. 
@@ -83,9 +83,14 @@ Will mark those if it's implemented.
   Tested out all the terminals I can find for Win10, but none of them have consistent output like real linux terminal. 
   The only working combination is *WSL2* + *Windows Terminal* or pure *CMD*. *CMD* + *Windows Terminal*
   can't handle ZWSP either. Since I can't use *sounddevice* on linux yet - until I implement server-client,
-  configuration I amd stuck with CMD. I might be better check if I can fix this on
+  configuration I am stuck with CMD. I might be better check if I can fix this on
   *py_cui* side, might become somewhat dirty if I ever managed to do so.
 
 ### Understanding how callback works in sounddevice.OutputStream
   To see how dumb I am - check [this](https://github.com/spatialaudiKo/python-sounddevice/issues/306) out.
   Huge thanks to dev!
+
+### py_cui.SliderWidget not matching the theme of other widgets
+  After closer look at the widget's code, I found it was better to make a 
+  [PR](https://github.com/jwlodek/py_cui/pull/87) out of it, rewriting drawing logic.
+  
