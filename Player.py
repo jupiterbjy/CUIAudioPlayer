@@ -140,8 +140,12 @@ class AudioPlayer:
         self.meta_list = self.root_.add_scroll_menu("Meta", 0, 5, column_span=2, row_span=5)
 
         self.info_box = self.root_.add_text_box("Info", 3, 0, column_span=4)
-        self.volume_box = self.root_.add_slider("Volume", 3, 4, column_span=1, min_val=0, max_val=8, init_val=4)
+        self.volume_slider = self.root_.add_slider("Volume", 3, 4, column_span=1, min_val=0, max_val=8, init_val=4)
         self.handle_volume_patch()
+        self.volume_slider.toggle_border()
+        self.volume_slider.toggle_title()
+        self.volume_slider.toggle_value()
+        self.volume_slider.set_bar_char("█")
 
         self.play_btn = self.root_.add_button("Play", 4, 0, command=self.play_cb)
         self.stop_btn = self.root_.add_button("Stop", 4, 1, command=self.stop_cb)
@@ -262,13 +266,13 @@ class AudioPlayer:
         self.write_meta_list(audio_list_str_gen(ordered))
 
     def handle_volume_patch(self):
-        original = self.volume_box._handle_key_press
+        original = self.volume_slider._handle_key_press
 
         def handler(handle_key_press):
             original(handle_key_press)
-            self.stream.multiplier = self.stream.step * self.volume_box.get_slider_value()
+            self.stream.multiplier = self.stream.step * self.volume_slider.get_slider_value()
 
-        self.volume_box._handle_key_press = handler
+        self.volume_slider._handle_key_press = handler
 
     # Implementation / helper / wrappers -----------------------
 
