@@ -1,10 +1,8 @@
-import os
 import pathlib
-import itertools
-import numpy as np
+# import numpy as np
 import soundfile as sf
 from tinytag import TinyTag
-from typing import Generator, Union
+from typing import Generator, Union, List
 
 try:
     import pydub
@@ -24,18 +22,19 @@ class PathWrapper:
 
     def __init__(self, path: str = "./"):
         self.current_path = pathlib.Path(path).absolute()
+        self.audio_file_list: List[pathlib.Path] = []
+        self.folder_list: List[pathlib.Path] = []
 
     def list_audio(self) -> Generator[pathlib.Path, None, None]:
         return (path_obj for path_obj in self.list_file() if path_obj.suffix in self.supported_formats)
 
     def list_folder(self) -> Generator[pathlib.Path, None, None]:
         """First element will be current folder location. either use next() or list()[1:] to skip it.."""
-        return self.list_file("**/")
+        return (item for item in self.current_path.glob("*/") if item.is_dir())
 
-    def list_file(self, pattern: str = "*.*") -> Generator[pathlib.Path, None, None]:
-        """This doesn't include folders!"""
-
-        return self.current_path.glob(pattern)
+    def list_file(self) -> Generator[pathlib.Path, None, None]:
+        """Can't use glob as it match folders such as .git"""
+        return (item for item in self.current_path.glob("*/") if item.is_file())
 
     def step_in(self, directory: Union[str, pathlib.Path]):
         """Relative / Absolute paths supported."""
@@ -58,20 +57,26 @@ class PathWrapper:
 
         return generator()
 
-    def fetch_sf_data(self):
+    def fetch_tag_data(self):
         def generator():
             for file_dir in self.list_audio():
-                try:
-                    yield sf.SoundFile(file_dir)
-
-                except RuntimeError:
-                    if PY_DUB_ENABLED:
-                        # https://stackoverflow.com/questions/53633177
-                        loaded = pydub.AudioSegment.from_file(file_dir)
-                        np_arr = np.array(loaded.get_array_of_samples())
-
-                        yield np_arr if loaded.channels != 1 else np_arr.reshape((-1, loaded.channels))
-                    else:
-                        continue
+                yield TinyTag.get(file_dir)
 
         return generator()
+
+    def __len__(self):
+        return len(self.folder_list) + len(self.audio_file_list)
+
+    def __getitem__(self, item: int):
+        try:
+            return self.folder_list[item]
+        except IndexError:
+            return self.audio_file_list[item - len(self.folder_list)]
+
+    def index(self, target: Union[str, pathlib.Path]):
+        try:
+            return len(self.folder_list) + self.audio_file_list.index(target)
+        except ValueError:
+            # assuming it's pure string directory.
+            path_converted = pathlib.Path(target)
+            return len(self.folder_list) + self.audio_file_list.index(path_converted)
