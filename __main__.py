@@ -1,0 +1,2 @@
+import Player
+Player.main()

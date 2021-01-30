@@ -428,8 +428,12 @@ def draw_player():
     root.start()
 
 
-if __name__ == '__main__':
+def main():
     try:
         draw_player()
     finally:
         sd.stop()
+
+
+if __name__ == '__main__':
+    main()
