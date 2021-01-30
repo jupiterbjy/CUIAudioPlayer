@@ -25,6 +25,8 @@ class PathWrapper:
     # subtypes = soundfile.available_subtypes()
     logger.debug(f"Available formats: {supported_formats}")
 
+    # Considering idx 0 to always be step out!
+
     def __init__(self, path: str = "./"):
         self.current_path = pathlib.Path(path).absolute()
         self.audio_file_list: List[pathlib.Path] = []
@@ -35,7 +37,13 @@ class PathWrapper:
 
     def list_folder(self) -> Generator[pathlib.Path, None, None]:
         """First element will be current folder location. either use next() or list()[1:] to skip it.."""
-        return (item for item in self.current_path.glob("*/") if item.is_dir())
+        def generator():
+            yield self.current_path.parent
+            for item in self.current_path.glob("*/"):
+                if item.is_dir():
+                    yield item
+
+        return generator()
 
     def list_file(self) -> Generator[pathlib.Path, None, None]:
         """Can't use glob as it match folders such as .git"""

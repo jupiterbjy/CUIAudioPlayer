@@ -98,12 +98,15 @@ def pad_actual_length(source: str, pad: str = "\u200b") -> Tuple[str, str]:
 def fit_to_actual_width(text: str, length_lim: int) -> str:
 
     padding, padded = pad_actual_length(text)
-    limited = padded[:length_lim]
+    limited = padded[:length_lim - 3]
     if wcwidth(limited[-1]) == 2:
         # if so, last padding was wear off, so last 2-width character shouldn't be displayed.
         limited = limited[:-1]
 
-    return limited.rstrip(padding)
+    if len(padded) > length_lim - 3:
+        limited += " .."
+
+    return limited
 
 
 # ------------------------------------------------------------------
@@ -155,6 +158,8 @@ class AudioPlayer:
         self.audio_list.add_text_color_rule(r"[0-9 ].*" + self.symbols["play"], py_cui.WHITE_ON_YELLOW, "contains")
         self.audio_list.add_text_color_rule(r"[0-9 ].*" + self.symbols["pause"], py_cui.WHITE_ON_YELLOW, "contains")
         self.audio_list.add_text_color_rule(r"[0-9 ].*" + self.symbols["stop"], py_cui.WHITE_ON_YELLOW, "contains")
+        self.audio_list.add_text_color_rule(r"DIR", py_cui.CYAN_ON_BLACK, "startswith")
+        # self.audio_list.add_text_color_rule(r"DIR", py_cui.CYAN_ON_BLACK, "startswith", match_type="regex")
         # self.audio_list.add_text_color_rule(r"►", py_cui.WHITE_ON_YELLOW, "contains")
         self.info_box.add_text_color_rule("ERR:", py_cui.WHITE_ON_RED, "startswith")
 
@@ -169,7 +174,7 @@ class AudioPlayer:
 
     def on_file_click(self):
         if self.selected_track in self.path_wrapper.folder_list:
-            pass
+            self.update_meta(clear=True)
         else:
             self.update_meta()
 
@@ -243,9 +248,17 @@ class AudioPlayer:
 
         digits = len(str(len(self.path_wrapper.audio_file_list))) + 2
 
-        folder_gen = (f"{('DIR'.center(digits))[:digits]}| {dir_n}" for dir_n in self.path_wrapper.folder_list)
-        audio_gen = (f"{str(idx).center(digits)}| {fn}" for idx, fn in enumerate(self.path_wrapper.audio_file_list))
-        self.write_audio_list(itertools.chain(folder_gen, audio_gen))
+        def folder_gen():
+            format_ = f"{('DIR'.ljust(digits))[:digits]}| "
+            yield format_ + ".."
+            for dir_n in itertools.islice(self.path_wrapper.folder_list, 1, None):
+                yield format_ + str(dir_n.name)
+
+        def audio_gen():
+            for idx, file_dir in enumerate(self.path_wrapper.audio_file_list):
+                yield f"{str(idx).center(digits)}| {file_dir.name}"
+
+        self.write_audio_list(itertools.chain(folder_gen(), audio_gen()))
 
         self.write_info(f"Found {len(self.path_wrapper.audio_file_list)} file(s).")
 
@@ -259,7 +272,11 @@ class AudioPlayer:
         self.refresh_list(search_files=True)
 
     # TODO: fetch metadata area's physical size and put line breaks or text cycling accordingly.
-    def update_meta(self):
+    def update_meta(self, clear=False):
+        if clear:
+            self.meta_list.clear()
+            return
+
         # Extract metadata
         ordered = extract_metadata(self.selected_track)
         self.write_meta_list(audio_list_str_gen(ordered))
@@ -403,6 +420,8 @@ def draw_player():
     root = py_cui.PyCUI(5, 7)
     root.set_refresh_timeout(0.1)  # this don't have to be a second. Might be an example of downside of ABC
     root.set_title(f"CUI Audio Player - v{VERSION_TAG}")
+    # root.toggle_unicode_borders()
+    root.set_widget_border_characters("╔", "╗", "╚", "╝", "═", "║")
     player_ref = AudioPlayer(root)
     assert player_ref  # Preventing unused variable check
 
