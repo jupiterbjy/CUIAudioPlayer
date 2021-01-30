@@ -29,7 +29,7 @@ assert CompatibilityPatch
 # Assuming relative location
 AUDIO_FOLDER = "audio_files"
 AUDIO_TYPES = ".ogg", ".mp3", ".m4a", ".flac"
-VERSION_TAG = "0.0.2a"
+VERSION_TAG = "0.0.3a - dev"
 WINDOWS = platform == 'win32'
 
 

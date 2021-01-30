@@ -7,7 +7,7 @@ Will show as broken on other configurations on Win10.
 
 Although this project strictly follow PEP8 at best, readability might not.
 
-*0.0.2a - 2x speed*  
+*0.0.3a - dev*  
 ![](Demo/Images/Demo.webp)
 
 ---
