@@ -1,19 +1,19 @@
 import sounddevice as sd
 import py_cui
 import array
+import pathlib
 import functools
 import itertools
 from collections import OrderedDict
 from tinytag import TinyTag
 from wcwidth import wcswidth, wcwidth
 from sys import platform
-from os import listdir
-from os.path import dirname, join, split
 from typing import Callable, Mapping, Generator, Iterable, Tuple, List
 
 from LoggingConfigurator import logger
 import CompatibilityPatch
 from SDManager import StreamManager, StreamStates
+from FileWalker import PathWrapper
 
 try:
     # noinspection PyUnresolvedReferences
@@ -37,19 +37,6 @@ def extract_metadata(abs_file_dir):
     tag = TinyTag.get(abs_file_dir)
     filtered = sorted(((k, v) for k, v in tag.as_dict().items() if v))
     return OrderedDict(filtered)
-
-
-def fetch_files():
-    try:
-        # check cached path first
-        file_list = listdir(fetch_files.cached_location)
-    except AttributeError:
-        # initializing path first
-        path_ = join(dirname(__file__), AUDIO_FOLDER)
-        fetch_files.cached_location = path_
-        return fetch_files()
-    else:
-        return [fn for fn in file_list if fn.endswith(AUDIO_TYPES)]
 
 
 def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable) -> None:
@@ -111,12 +98,15 @@ def pad_actual_length(source: str, pad: str = "\u200b") -> Tuple[str, str]:
 def fit_to_actual_width(text: str, length_lim: int) -> str:
 
     padding, padded = pad_actual_length(text)
-    limited = padded[:length_lim]
+    limited = padded[:length_lim - 3]
     if wcwidth(limited[-1]) == 2:
         # if so, last padding was wear off, so last 2-width character shouldn't be displayed.
         limited = limited[:-1]
 
-    return limited.rstrip(padding)
+    if len(padded) > length_lim - 3:
+        limited += " .."
+
+    return limited
 
 
 # ------------------------------------------------------------------
@@ -158,29 +148,46 @@ class AudioPlayer:
         self.clear_target = [self.audio_list, self.meta_list, self.info_box]
 
         # add callback to update metadata on every redraw.
-        add_callback_patch(self.audio_list, self.update_meta)
+        add_callback_patch(self.audio_list, self.on_file_click)
 
         # Key binds
         self.play_btn.add_key_command(py_cui.keys.KEY_SPACE, self.play_cb)
-        self.audio_list.add_key_command(py_cui.keys.KEY_ENTER, self.play_stream)
+        self.audio_list.add_key_command(py_cui.keys.KEY_ENTER, self.on_enter_press)
 
         # add color rules - might be better implementing custom coloring methods, someday.
         self.audio_list.add_text_color_rule(r"[0-9 ].*" + self.symbols["play"], py_cui.WHITE_ON_YELLOW, "contains")
         self.audio_list.add_text_color_rule(r"[0-9 ].*" + self.symbols["pause"], py_cui.WHITE_ON_YELLOW, "contains")
         self.audio_list.add_text_color_rule(r"[0-9 ].*" + self.symbols["stop"], py_cui.WHITE_ON_YELLOW, "contains")
+        self.audio_list.add_text_color_rule(r"DIR", py_cui.CYAN_ON_BLACK, "startswith")
+        # self.audio_list.add_text_color_rule(r"DIR", py_cui.CYAN_ON_BLACK, "startswith", match_type="regex")
         # self.audio_list.add_text_color_rule(r"►", py_cui.WHITE_ON_YELLOW, "contains")
         self.info_box.add_text_color_rule("ERR:", py_cui.WHITE_ON_RED, "startswith")
 
-        self.files: List[str] = []
         self.current_play_generator = None
         self.shuffle = False
 
         self.stream: StreamManager.StreamManager = StreamManager.StreamManager(self.show_progress, self.play_next)
-
+        self.path_wrapper = PathWrapper()
         self.reload_cb()
+
+    # Primary callbacks
+
+    def on_file_click(self):
+        if self.selected_track in self.path_wrapper.folder_list:
+            self.update_meta(clear=True)
+        else:
+            self.update_meta()
 
     # Media control callback definitions -----------------------
     # TODO: fix malfunctioning play next when force-starting different tracks mid-playing.
+
+    def on_enter_press(self):
+        logger.debug(f"Enter on scroll view, {self.selected_track}, {self.path_wrapper.folder_list}")
+        if self.selected_track in self.path_wrapper.folder_list:
+            self.path_wrapper.step_in(self.selected_track)
+            self.reload_cb()
+        else:
+            self.play_stream()
 
     def play_cb(self):
         try:
@@ -199,9 +206,9 @@ class AudioPlayer:
             audio_idx = self.selected_idx
 
         try:
-            self.stream.load_stream(self.abs_dir(audio_idx))
+            self.stream.load_stream(self.path_wrapper[audio_idx])
         except IndexError:
-            logger.debug(f"Invalid idx: {audio_idx} / {len(self.files)}")
+            logger.debug(f"Invalid idx: {audio_idx} / {len(self.path_wrapper)}")
             return False
 
         except RuntimeError as err:
@@ -237,14 +244,23 @@ class AudioPlayer:
         self.audio_list.clear()
 
         if search_files:
-            self.files = fetch_files()
+            self.path_wrapper.refresh_list()
 
-        digits = len(str(len(self.files))) + 2
+        digits = len(str(len(self.path_wrapper.audio_file_list))) + 2
 
-        lazy_line_gen = (f"{str(idx).center(digits)}| {fn}" for idx, fn in enumerate(self.files))
-        self.write_audio_list(lazy_line_gen)
+        def folder_gen():
+            format_ = f"{('DIR'.ljust(digits))[:digits]}| "
+            yield format_ + ".."
+            for dir_n in itertools.islice(self.path_wrapper.folder_list, 1, None):
+                yield format_ + str(dir_n.name)
 
-        self.write_info(f"Found {len(self.files)} file(s).")
+        def audio_gen():
+            for idx, file_dir in enumerate(self.path_wrapper.audio_file_list):
+                yield f"{str(idx).center(digits)}| {file_dir.name}"
+
+        self.write_audio_list(itertools.chain(folder_gen(), audio_gen()))
+
+        self.write_info(f"Found {len(self.path_wrapper.audio_file_list)} file(s).")
 
     def reload_cb(self):
         self.stop_cb()
@@ -253,16 +269,16 @@ class AudioPlayer:
         for widget in self.clear_target:
             widget.clear()
 
-        self.refresh_list()
+        self.refresh_list(search_files=True)
 
     # TODO: fetch metadata area's physical size and put line breaks or text cycling accordingly.
-    def update_meta(self):
-        # Extract metadata
-        try:
-            ordered = extract_metadata(self.abs_dir(self.selected_idx))
-        except IndexError:
+    def update_meta(self, clear=False):
+        if clear:
+            self.meta_list.clear()
             return
 
+        # Extract metadata
+        ordered = extract_metadata(self.selected_track)
         self.write_meta_list(audio_list_str_gen(ordered))
 
     def handle_volume_patch(self):
@@ -331,9 +347,6 @@ class AudioPlayer:
         else:
             self.mark_target(track_idx, self.symbols["play"], self.symbols["stop"])
 
-    def set_current_selected(self, track_idx):
-        pass
-
     @staticmethod
     @functools.lru_cache(256)
     def digit(int_):
@@ -356,7 +369,7 @@ class AudioPlayer:
         # Shuffling is harder than imagined!
         # https://engineering.atspotify.com/2014/02/28/how-to-shuffle-songs/
 
-        cycle_gen = itertools.cycle(array.array('i', (n for n in range(len(self.files)))))
+        cycle_gen = itertools.cycle(array.array('i', (n for n in range(len(self.path_wrapper.audio_file_list)))))
         for _ in range(self.currently_playing + 1):
             next(cycle_gen)
 
@@ -370,7 +383,12 @@ class AudioPlayer:
         logger.debug(f"Condition: {self.stream.error_flag}")
 
         if self.stream.error_flag:
-            next_ = next(self.current_play_generator)
+            try:
+                next_ = next(self.current_play_generator)
+            except TypeError:
+                self.init_playlist()
+                next_ = next(self.current_play_generator)
+
             logger.debug(f"Playing Next - {next_}")
 
             if not self.play_stream(next_):
@@ -388,31 +406,34 @@ class AudioPlayer:
         return self.audio_list.get_selected_item_index()
 
     @property
-    def selected_track(self) -> str:
-        return self.files[self.selected_idx]
+    def selected_track(self) -> pathlib.Path:
+        # logger.debug(f"selected track: {self.path_wrapper[self.selected_idx]}, idx: {self.selected_idx}")
+        return self.path_wrapper[self.selected_idx]
 
     @property
     def currently_playing(self) -> int:
         file_name = self.stream.audio_info.loaded_data.name
-        return self.files.index(split(file_name)[1])
-
-    def abs_dir(self, idx):
-        # noinspection PyUnresolvedReferences
-        return join(fetch_files.cached_location, self.files[idx])  # dirty trick
+        return self.path_wrapper.index(file_name)
 
 
 def draw_player():
     root = py_cui.PyCUI(5, 7)
     root.set_refresh_timeout(0.1)  # this don't have to be a second. Might be an example of downside of ABC
     root.set_title(f"CUI Audio Player - v{VERSION_TAG}")
+    # root.toggle_unicode_borders()
+    root.set_widget_border_characters("╔", "╗", "╚", "╝", "═", "║")
     player_ref = AudioPlayer(root)
     assert player_ref  # Preventing unused variable check
 
     root.start()
 
 
-if __name__ == '__main__':
+def main():
     try:
         draw_player()
     finally:
         sd.stop()
+
+
+if __name__ == '__main__':
+    main()
