@@ -8,8 +8,6 @@ from collections import OrderedDict
 from tinytag import TinyTag
 from wcwidth import wcswidth, wcwidth
 from sys import platform
-from os import listdir
-from os.path import dirname, join, split
 from typing import Callable, Mapping, Generator, Iterable, Tuple, List
 
 from LoggingConfigurator import logger
@@ -179,6 +177,7 @@ class AudioPlayer:
     # TODO: fix malfunctioning play next when force-starting different tracks mid-playing.
 
     def on_enter_press(self):
+        logger.debug(f"Enter on scroll view, {self.selected_track}, {self.path_wrapper.folder_list}")
         if self.selected_track in self.path_wrapper.folder_list:
             self.path_wrapper.step_in(self.selected_track)
             self.reload_cb()
@@ -240,8 +239,7 @@ class AudioPlayer:
         self.audio_list.clear()
 
         if search_files:
-            self.path_wrapper.audio_file_list = list(self.path_wrapper.list_audio())
-            self.path_wrapper.folder_list = list(self.path_wrapper.list_folder())
+            self.path_wrapper.refresh_list()
 
         digits = len(str(len(self.path_wrapper.audio_file_list))) + 2
 
@@ -258,7 +256,7 @@ class AudioPlayer:
         for widget in self.clear_target:
             widget.clear()
 
-        self.refresh_list()
+        self.refresh_list(search_files=True)
 
     # TODO: fetch metadata area's physical size and put line breaks or text cycling accordingly.
     def update_meta(self):
@@ -331,9 +329,6 @@ class AudioPlayer:
             self.mark_target(track_idx, self.symbols["pause"], self.symbols["stop"])
         else:
             self.mark_target(track_idx, self.symbols["play"], self.symbols["stop"])
-
-    def set_current_selected(self, track_idx):
-        pass
 
     @staticmethod
     @functools.lru_cache(256)

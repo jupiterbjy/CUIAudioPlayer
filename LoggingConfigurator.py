@@ -5,6 +5,8 @@ import inspect
 LOG_DETAILED_CALLER = True
 # This will log where the function is from.
 
+# TODO: either monkey-patch or use default settings of logging to use logging.getLogger on other sources.
+
 LOGGER = logging.getLogger("UI_DEBUG")
 
 if LOG_DETAILED_CALLER:

@@ -4,6 +4,8 @@ import soundfile as sf
 from tinytag import TinyTag
 from typing import Generator, Union, List
 
+from LoggingConfigurator import logger
+
 try:
     import pydub
 except ImportError:
@@ -17,8 +19,11 @@ class PathWrapper:
     primary_formats = set("." + key.lower() for key in sf.available_formats().keys())
     secondary_formats = {".m4a", ".mp3"} if PY_DUB_ENABLED else {}
     supported_formats = primary_formats | secondary_formats
+    supported_formats = supported_formats | set(key.upper() for key in supported_formats)
+
     # re_match_pattern = "$|".join(final_supported_formats)
     # subtypes = soundfile.available_subtypes()
+    logger.debug(f"Available formats: {supported_formats}")
 
     def __init__(self, path: str = "./"):
         self.current_path = pathlib.Path(path).absolute()
@@ -40,6 +45,7 @@ class PathWrapper:
         """Relative / Absolute paths supported."""
 
         self.current_path = self.current_path.joinpath(directory)
+        self.refresh_list()
         return self.current_path
 
     def step_out(self, depth=1):
@@ -47,7 +53,12 @@ class PathWrapper:
             return self.current_path
 
         self.current_path = self.current_path.parents[depth - 1]
+        self.refresh_list()
         return self.current_path
+
+    def refresh_list(self):
+        self.audio_file_list = list(self.list_audio())
+        self.folder_list = list(self.list_folder())
 
     def fetch_meta(self):
         # This might have to deal the cases such as path changing before generator fires up.
@@ -68,9 +79,13 @@ class PathWrapper:
         return len(self.folder_list) + len(self.audio_file_list)
 
     def __getitem__(self, item: int):
+        logger.debug(f"idx: {item}, len_f: {len(self.folder_list)}, len_a: {len(self.audio_file_list)}")
         try:
             return self.folder_list[item]
-        except IndexError:
+        except IndexError as err:
+            if len(self) == 0:
+                raise IndexError("No file or folder to index in current directory.") from err
+
             return self.audio_file_list[item - len(self.folder_list)]
 
     def index(self, target: Union[str, pathlib.Path]):
