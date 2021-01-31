@@ -4,6 +4,7 @@ import array
 import pathlib
 import functools
 import itertools
+from contextlib import contextmanager
 from collections import OrderedDict
 from tinytag import TinyTag
 from wcwidth import wcswidth, wcwidth
@@ -137,7 +138,7 @@ class AudioPlayer:
         self.volume_slider.toggle_value()
         self.volume_slider.set_bar_char("█")
 
-        self.play_btn = self.root_.add_button("Play", 4, 0, command=self.play_cb)
+        self.play_btn = self.root_.add_button("Play", 4, 0, command=self.play_cb_space_bar)
         self.stop_btn = self.root_.add_button("Stop", 4, 1, command=self.stop_cb)
         self.reload_btn = self.root_.add_button("Reload", 4, 2, command=self.reload_cb)
 
@@ -145,13 +146,14 @@ class AudioPlayer:
         self.reserved_2 = self.root_.add_button("reserved", 4, 4)
 
         # just for ease of clearing
-        self.clear_target = [self.meta_list, self.info_box]
+        self.clear_target = [self.audio_list, self.meta_list, self.info_box]
 
         # add callback to update metadata on every redraw.
         add_callback_patch(self.audio_list, self.on_file_click)
 
         # Key binds
-        self.audio_list.add_key_command(py_cui.keys.KEY_ENTER, self.on_enter_press)
+        self.audio_list.add_key_command(py_cui.keys.KEY_ENTER, self.play_cb_enter)
+        self.audio_list.add_key_command(py_cui.keys.KEY_SPACE, self.play_cb_space_bar)
 
         # add color rules - might be better implementing custom coloring methods, someday.
         self.audio_list.add_text_color_rule(r"[0-9 ].*" + self.symbols["play"], py_cui.WHITE_ON_YELLOW, "contains")
@@ -180,26 +182,39 @@ class AudioPlayer:
     # Media control callback definitions -----------------------
     # TODO: fix malfunctioning play next when force-starting different tracks mid-playing.
 
-    def on_enter_press(self):
-        logger.debug(f"Enter on scroll view, {self.selected_track}, {self.path_wrapper.folder_list}")
+    def play_cb_enter(self):
         if self.selected_track in self.path_wrapper.folder_list:
             self.path_wrapper.step_in(self.selected_track)
             self.reload_cb()
         else:
-            self.play_stream()
+            # force play audio
+            with self.maintain_current_view():
+                if self.play_stream():
+                    self.mark_as_playing(self.currently_playing)
 
-    def play_cb(self):
-        try:
-            self.stream.pause_stream()  # assuming State: Paused
-            self.mark_as_paused(self.currently_playing)
-        except RuntimeError:
-            self.stream.start_stream()  # State: stopped
-            self.mark_as_playing(self.currently_playing)
-        except FileNotFoundError:
-            # State: Unloaded
-            self.play_stream()
+    def play_cb_space_bar(self):
+        """
+        Determine actions depending on selected item when space bar is pressed on audio list.
+        Also a callback for Play Button.
+        """
+        with self.maintain_current_view():
+            try:
+                # assuming State: Paused
+                self.stream.pause_stream()
+                self.mark_as_paused(self.currently_playing)
 
-    def play_stream(self, audio_idx=None) -> bool:
+            except RuntimeError:
+                # State: stopped
+                self.stream.start_stream()
+                self.mark_as_playing(self.currently_playing)
+
+            except FileNotFoundError:
+                # State: Unloaded
+                if self.play_stream():
+                    self.mark_as_playing(self.currently_playing)
+
+    def play_stream(self, audio_idx=None) -> int:
+        """Load audio and starts audio stream. Returns True if successful."""
         if not audio_idx:
             audio_idx = self.selected_idx
 
@@ -213,18 +228,8 @@ class AudioPlayer:
             self.write_info(f"ERR: {str(err).split(':')[-1]}")
             return False
 
-        # Cache current idx and top visible item idx
-        idx_last = self.audio_list.get_selected_item_index()
-        initial_top_item = self.audio_list._top_view
         self.refresh_list(search_files=False)
-
         self.stream.start_stream()
-        self.mark_as_playing(audio_idx)
-
-        # Restore after manipulation
-        self.audio_list.set_selected_item_index(idx_last)
-        self.audio_list._top_view = initial_top_item
-
         self.init_playlist()
 
         return True
@@ -235,18 +240,11 @@ class AudioPlayer:
         except (RuntimeError, FileNotFoundError):
             return
 
-        # Cache current idx and top visible item idx
-        idx_last = self.audio_list.get_selected_item_index()
-        initial_top_item = self.audio_list._top_view
-
-        # revert texts
-        self.refresh_list(search_files=False)
-        self.mark_as_stopped(self.currently_playing)
-        self.write_info("")
-
-        # Restore after manipulation
-        self.audio_list.set_selected_item_index(idx_last)
-        self.audio_list._top_view = initial_top_item
+        with self.maintain_current_view():
+            # revert texts
+            self.refresh_list(search_files=False)
+            self.mark_as_stopped(self.currently_playing)
+            self.write_info("")
 
     def refresh_list(self, search_files=True):
         # save current view
@@ -329,9 +327,6 @@ class AudioPlayer:
         self.write_audio_list(source)
 
     def mark_as_playing(self, track_idx):
-        # if self.stream.stream_state == SoundModule.StreamPausedState:
-        #     self.mark_target(track_idx, self.symbols["pause"], self.symbols["play"])
-
         if self.stream.stream_state == StreamStates.StreamStoppedState:
             self.mark_target(track_idx, self.symbols["stop"], self.symbols["play"])
         else:
@@ -398,7 +393,7 @@ class AudioPlayer:
                 logger.warning("Error playing next track. Moving on.")
                 self.play_next()
 
-    # UI related -----------------------------------------------
+    # Helper functions -----------------------------------------
 
     def get_absolute_size(self, widget: py_cui.widgets.Widget) -> Tuple[int, int]:
         abs_y, abs_x = widget.get_absolute_dimensions()
@@ -417,6 +412,17 @@ class AudioPlayer:
     def currently_playing(self) -> int:
         file_name = self.stream.audio_info.loaded_data.name
         return self.path_wrapper.index(file_name)
+
+    @contextmanager
+    def maintain_current_view(self, *args, **kwargs):
+        """Remembers indices of both `selected / visible top item` and restores it."""
+        current_idx = self.audio_list.get_selected_item_index()
+        visible_idx = self.audio_list._top_view
+        try:
+            yield
+        finally:
+            self.audio_list.set_selected_item_index(current_idx)
+            self.audio_list._top_view = visible_idx
 
 
 def draw_player():
