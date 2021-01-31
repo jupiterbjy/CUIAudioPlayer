@@ -391,9 +391,12 @@ class AudioPlayer:
 
             logger.debug(f"Playing Next - {next_}")
 
-            if not self.play_stream(next_):
-                logger.warning("Error playing next track. Moving on.")
-                self.play_next()
+            with self.maintain_current_view():
+                if not self.play_stream(next_):
+                    logger.warning("Error playing next track. Moving on.")
+                    self.play_next()
+                else:
+                    self.mark_as_playing(self.currently_playing)
 
     # Helper functions -----------------------------------------
 
@@ -416,7 +419,7 @@ class AudioPlayer:
         return self.path_wrapper.index(file_name)
 
     @contextmanager
-    def maintain_current_view(self, *args, **kwargs):
+    def maintain_current_view(self):
         """Remembers indices of both `selected / visible top item` and restores it."""
         current_idx = self.audio_list.get_selected_item_index()
         visible_idx = self.audio_list._top_view
