@@ -23,23 +23,23 @@ class AudioInfo:
 
 class StreamState(abc.ABC):
     @staticmethod
-    def start_stream(stream_manager: "StreamManager"):
+    def start_stream(stream_manager: "StreamManagerABC"):
         raise NotImplementedError()
 
     @staticmethod
-    def stop_stream(stream_manager: "StreamManager"):
+    def stop_stream(stream_manager: "StreamManagerABC"):
         raise NotImplementedError()
 
     @staticmethod
-    def pause_stream(stream_manager: "StreamManager"):
+    def pause_stream(stream_manager: "StreamManagerABC"):
         raise NotImplementedError()
 
     @staticmethod
-    def load_stream(stream_manager: "StreamManager", audio_dir: str):
+    def load_stream(stream_manager: "StreamManagerABC", audio_dir: str):
         raise NotImplementedError()
 
 
-class StreamManager(abc.ABC):
+class StreamManagerABC(abc.ABC):
     # Faking it into class attribute, but actually instance attribute.
     audio_info: AudioInfo
     stream: Union[sd.OutputStream, sd.RawStream]
@@ -55,7 +55,7 @@ class StreamManager(abc.ABC):
     volume_range: Tuple[float, float]
     step: float
 
-    error_flag: bool
+    stop_flag: bool
 
     def new_state(self, status: Type[StreamState]) -> None:
         pass
@@ -78,3 +78,4 @@ class StreamManager(abc.ABC):
 
     def volume_down(self) -> None:
         pass
+

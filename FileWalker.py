@@ -87,7 +87,7 @@ class PathWrapper:
         return len(self.folder_list) + len(self.audio_file_list)
 
     def __getitem__(self, item: int):
-        logger.debug(f"idx: {item}, len_f: {len(self.folder_list)}, len_a: {len(self.audio_file_list)}")
+        # logger.debug(f"idx: {item}, len_f: {len(self.folder_list)}, len_a: {len(self.audio_file_list)}")
         try:
             return self.folder_list[item]
         except IndexError as err:

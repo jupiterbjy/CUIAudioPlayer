@@ -8,7 +8,7 @@ from collections import OrderedDict
 from tinytag import TinyTag
 from wcwidth import wcswidth, wcwidth
 from sys import platform
-from typing import Callable, Mapping, Generator, Iterable, Tuple, List
+from typing import Callable, Mapping, Generator, Iterable, Tuple
 
 from LoggingConfigurator import logger
 import CompatibilityPatch
@@ -151,7 +151,6 @@ class AudioPlayer:
         add_callback_patch(self.audio_list, self.on_file_click)
 
         # Key binds
-        self.play_btn.add_key_command(py_cui.keys.KEY_SPACE, self.play_cb)
         self.audio_list.add_key_command(py_cui.keys.KEY_ENTER, self.on_enter_press)
 
         # add color rules - might be better implementing custom coloring methods, someday.
@@ -166,7 +165,7 @@ class AudioPlayer:
         self.current_play_generator = None
         self.shuffle = False
 
-        self.stream: StreamManager.StreamManager = StreamManager.StreamManager(self.show_progress, self.play_next)
+        self.stream: StreamManager.StreamManagerABC = StreamManager.StreamManager(self.show_progress, self.play_next)
         self.path_wrapper = PathWrapper()
         self.reload_cb()
 
@@ -191,7 +190,6 @@ class AudioPlayer:
 
     def play_cb(self):
         try:
-            self.stream.error_flag = False
             self.stream.pause_stream()  # assuming State: Paused
             self.mark_as_paused(self.currently_playing)
         except RuntimeError:
@@ -223,7 +221,6 @@ class AudioPlayer:
         return True
 
     def stop_cb(self):
-        self.stream.error_flag = False  # need this before final callback is called, what a mess.
         try:
             self.stream.stop_stream()
         except (RuntimeError, FileNotFoundError):
@@ -320,8 +317,6 @@ class AudioPlayer:
         self.write_audio_list(source)
 
     def mark_as_playing(self, track_idx):
-        self.stream.error_flag = True
-
         # if self.stream.stream_state == SoundModule.StreamPausedState:
         #     self.mark_target(track_idx, self.symbols["pause"], self.symbols["play"])
 
@@ -332,16 +327,12 @@ class AudioPlayer:
 
     def mark_as_paused(self, track_idx):
         if self.stream.stream_state == StreamStates.StreamPausedState:
-
-            self.stream.error_flag = False
             self.mark_target(track_idx, self.symbols["play"], self.symbols["pause"])
         else:
             self.mark_target(track_idx, self.symbols["pause"], self.symbols["play"])
             # This fits more to mark_as_playing, but consequences does not allow to do so, for now.
 
     def mark_as_stopped(self, track_idx):
-        self.stream.error_flag = False
-
         if self.stream.stream_state == StreamStates.StreamPausedState:
             self.mark_target(track_idx, self.symbols["pause"], self.symbols["stop"])
         else:
@@ -354,7 +345,7 @@ class AudioPlayer:
 
     def show_progress(self, audio_info: StreamManager.AudioInfo, current_frame):
         # counting in some marginal errors of mismatching frames and total frames count.
-        file_name = audio_info.title
+        file_name = title if (title := audio_info.title) else self.path_wrapper[self.currently_playing].name
         max_frame = audio_info.total_frame
         duration = audio_info.duration_tag
         format_specifier = f"0{self.digit(duration)}.1f"
@@ -380,9 +371,9 @@ class AudioPlayer:
 
     def play_next(self):
         # There's no way to stop this when error is on UI side
-        logger.debug(f"Condition: {self.stream.error_flag}")
+        logger.debug(f"Condition: {self.stream.stop_flag}")
 
-        if self.stream.error_flag:
+        if not self.stream.stop_flag:
             try:
                 next_ = next(self.current_play_generator)
             except TypeError:

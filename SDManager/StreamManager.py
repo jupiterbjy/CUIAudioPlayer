@@ -3,9 +3,10 @@ from typing import Callable, Type
 
 from LoggingConfigurator import logger
 from .StreamStates import StreamState, AudioUnloadedState, AudioInfo
+from .Typehint import StreamManagerABC
 
 
-class StreamManager:
+class StreamManager(StreamManagerABC):
     def __init__(self, stream_callback: Callable = None, finished_callback: Callable = None, callback_every_n=2):
         self.callback_minimum_cycle = callback_every_n
 
@@ -22,7 +23,7 @@ class StreamManager:
         self.volume_range = 0, 2
         self.step = 0.25
         self.stream_state = AudioUnloadedState
-        self.error_flag = False
+        self.stop_flag = False
 
     def new_state(self, status: Type[StreamState]):
         logger.debug(f"Switching state: {self.stream_state} -> {status}")
@@ -32,12 +33,15 @@ class StreamManager:
         return self.stream_state.load_stream(self, audio_location)
 
     def start_stream(self):
+        self. stop_flag = False
         return self.stream_state.start_stream(self)
 
     def stop_stream(self):
+        self.stop_flag = True
         return self.stream_state.stop_stream(self)
 
     def pause_stream(self):
+        self.stop_flag = True
         return self.stream_state.pause_stream(self)
 
     def volume_up(self):
@@ -57,10 +61,10 @@ class StreamManager:
 
 if __name__ == '__main__':
     def test():
-        from StreamManager import StreamManager
+        from StreamManager import StreamManagerABC
         audio_location_1 = r"E:\github\CUIAudioPlayer\audio_files\short_sample_okayu_rejection.ogg"
         audio_location_2 = r"E:\github\CUIAudioPlayer\audio_files\Higher's High   ナナヲアカリ.ogg"
-        ref = StreamManager()
+        ref = StreamManagerABC()
         ref.load_stream(audio_location_2)
         ref.start_stream()
 

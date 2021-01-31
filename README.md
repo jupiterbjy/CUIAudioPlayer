@@ -48,12 +48,14 @@ Will mark those if it's implemented.
     - [x] pause
     - [x] highlight current
     - [x] wrong file handling
-    - [ ] library navigation
+    - [x] library navigation
     - [x] show progress - Temporarily using seconds.
     - [x] Continues play - Half broken, but works mostly.
     - [ ] Shuffle
     - [x] Volume control (SW)
     - [ ] Jump to section
+    - [ ] Previous / Next track
+    - [ ] mp3 / m4a support - might require pydub and conversion.
 - [ ] Album art visualizing on some sort of ascii art.
 - [ ] lrc support
 - [ ] Show freq. map

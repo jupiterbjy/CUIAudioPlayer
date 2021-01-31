@@ -2,11 +2,11 @@ import sounddevice as sd
 import itertools
 from typing import Callable, Type
 
-from .Typehint import StreamManager, StreamState
+from .Typehint import StreamManagerABC, StreamState
 from LoggingConfigurator import logger
 
 
-def stream_callback_closure(stream_manager: "StreamManager", raw=False) -> Callable:
+def stream_callback_closure(stream_manager: "StreamManagerABC", raw=False) -> Callable:
     # Collecting names here to reduce call overhead.
     last_frame = -1
     dtype = sd.default.dtype[1]
@@ -20,10 +20,14 @@ def stream_callback_closure(stream_manager: "StreamManager", raw=False) -> Calla
     # to reduce load, custom callback will be called every n-th iteration of this generator.
 
     def stream_cb(data_out, frames: int, time, status: sd.CallbackFlags) -> None:
-        nonlocal last_frame
+        nonlocal last_frame, stream_manager
         assert not status
 
-        data_out[:] = audio_ref.read(frames, fill_value=0) * stream_manager.multiplier
+        try:
+            data_out[:] = audio_ref.read(frames, fill_value=0) * stream_manager.multiplier
+        except Exception:
+            stream_manager.stop_flag = True
+            raise
 
         if last_frame == (current_frame := audio_ref.tell()):
             raise sd.CallbackAbort
@@ -57,10 +61,12 @@ def stream_callback_closure(stream_manager: "StreamManager", raw=False) -> Calla
     return stream_cb_raw if raw else stream_cb
 
 
-def finished_callback_wrapper(stream_manager: "StreamManager", new_next_state: Type[StreamState]):
+def finished_callback_wrapper(stream_manager: "StreamManagerABC", new_next_state: Type[StreamState]):
     def callback():
-        logger.debug(f"Playback finished.")
+        logger.debug(f"Playback finished. Stop flag: {stream_manager.stop_flag}")
         stream_manager.new_state(new_next_state)
-        stream_manager.finished_cb()
+
+        if not stream_manager.stop_flag:
+            stream_manager.finished_cb()
 
     return callback
