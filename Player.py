@@ -145,7 +145,7 @@ class AudioPlayer:
         self.reserved_2 = self.root_.add_button("reserved", 4, 4)
 
         # just for ease of clearing
-        self.clear_target = [self.audio_list, self.meta_list, self.info_box]
+        self.clear_target = [self.meta_list, self.info_box]
 
         # add callback to update metadata on every redraw.
         add_callback_patch(self.audio_list, self.on_file_click)
@@ -213,9 +213,18 @@ class AudioPlayer:
             self.write_info(f"ERR: {str(err).split(':')[-1]}")
             return False
 
-        self.refresh_list(False)
+        # Cache current idx and top visible item idx
+        idx_last = self.audio_list.get_selected_item_index()
+        initial_top_item = self.audio_list._top_view
+        self.refresh_list(search_files=False)
+
         self.stream.start_stream()
         self.mark_as_playing(audio_idx)
+
+        # Restore after manipulation
+        self.audio_list.set_selected_item_index(idx_last)
+        self.audio_list._top_view = initial_top_item
+
         self.init_playlist()
 
         return True
@@ -226,18 +235,21 @@ class AudioPlayer:
         except (RuntimeError, FileNotFoundError):
             return
 
-        # store current idx
+        # Cache current idx and top visible item idx
         idx_last = self.audio_list.get_selected_item_index()
+        initial_top_item = self.audio_list._top_view
 
         # revert texts
         self.refresh_list(search_files=False)
         self.mark_as_stopped(self.currently_playing)
         self.write_info("")
 
-        # revert idx back
+        # Restore after manipulation
         self.audio_list.set_selected_item_index(idx_last)
+        self.audio_list._top_view = initial_top_item
 
     def refresh_list(self, search_files=True):
+        # save current view
         self.audio_list.clear()
 
         if search_files:
@@ -256,13 +268,13 @@ class AudioPlayer:
                 yield f"{str(idx).center(digits)}| {file_dir.name}"
 
         self.write_audio_list(itertools.chain(folder_gen(), audio_gen()))
-
         self.write_info(f"Found {len(self.path_wrapper.audio_file_list)} file(s).")
 
     def reload_cb(self):
         self.stop_cb()
 
         # clear widgets
+
         for widget in self.clear_target:
             widget.clear()
 
