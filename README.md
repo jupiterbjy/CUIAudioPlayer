@@ -1,4 +1,10 @@
-## CUI Audio Player
+# CUI Audio Player
+
+---
+
+## Intro
+
+### *Still under heavy development! I'm testing this as much I can, but there will be ton of bugs!*
 
 Just a tiny project to create a script that literally does its name.
 
@@ -18,7 +24,10 @@ This tiny project has goal of learning followings:
    - [py_cui](https://github.com/jwlodek/py_cui)
    - [py-sounddevice](https://github.com/spatialaudio/python-sounddevice)
    - [tinytag](https://github.com/devsnd/tinytag)
- - 
+  
+ - Book
+   - Python Cookbook 3E
+   - Fluent Python
 
 Originally meant to create a testing bed for learning *sounddevice* module for use in project
  future projects inside [ProjectIncubator](github.com/jupiterbjy/ProjectIncubator), turns out that this module is
@@ -50,7 +59,7 @@ Will mark those if it's implemented.
     - [x] wrong file handling
     - [x] library navigation
     - [x] show progress - Temporarily using seconds.
-    - [x] Continues play - Half broken, but works mostly.
+    - [x] Continues play - works mostly.
     - [ ] Shuffle
     - [x] Volume control (SW)
     - [ ] Jump to section
@@ -60,11 +69,12 @@ Will mark those if it's implemented.
 - [ ] lrc support
 - [ ] Show freq. map
 - [ ] favorites
+- [ ] Server - client stream
 
 ---
 ## Things to overcome / overcame
 
-### *py_cui*'s lack of support for 2-width characters
+### 2-width characters on *py_cui*
   [This](Demo/Images/compare_before.png) is caused by some 2-digit characters such as some unicode symbols or CJK letters.
   For now, I used *wcwidth* module to determine actual string length and add trailing ZWSP on each of those letters.
   With actual length and *len()* length now matches, and by slicing and striping outcome - py_cui now don't break up
