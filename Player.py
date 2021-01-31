@@ -267,6 +267,8 @@ class AudioPlayer:
 
         self.write_audio_list(itertools.chain(folder_gen(), audio_gen()))
         self.write_info(f"Found {len(self.path_wrapper.audio_file_list)} file(s).")
+        self.audio_list.set_title(f"Audio List - "
+                                  f"{len(self.path_wrapper.audio_file_list)} track(s)")
 
     def reload_cb(self):
         self.stop_cb()

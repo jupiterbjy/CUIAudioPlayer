@@ -6,6 +6,11 @@ from .Callbacks import stream_callback_closure, finished_callback_wrapper
 from LoggingConfigurator import logger
 
 
+"""
+Finite-State Machine implementation, idea from Python Cookbook 3E.
+"""
+
+
 class AudioUnloadedState(StreamState):
     @staticmethod
     def start_stream(stream_manager: "StreamManagerABC"):
