@@ -26,8 +26,6 @@ except ImportError:
 assert CompatibilityPatch
 
 
-# THIS WILL NOT RUN PROPERLY ON WINDOWS TERMINAL! Currently Developing on CMD!
-# Assuming relative location
 AUDIO_FOLDER = "audio_files"
 AUDIO_TYPES = ".ogg", ".mp3", ".m4a", ".flac"
 VERSION_TAG = "0.0.3a - dev"
@@ -64,18 +62,23 @@ def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable) -> No
         setattr(widget_, target, patch_factory(getattr(widget_, target)))
 
 
-def audio_list_str_gen(dict_: Mapping, ellipsis_: str = "..", offset: int = 1) -> Generator[str, None, None]:
+def meta_list_str_gen(dict_: Mapping, ellipsis_: str = "..", offset: int = 1) -> Generator[str, None, None]:
     """
     Cuts text in avg. of given dict_'s keys.
     :param dict_: Mapping containing metadata.
     :param ellipsis_: Suffix to use as ellipsis, when text is longer than avg.
     :param offset: Offset to add / reduce max displayed length from avg.
     """
-    key_avg = (sum(map(len, dict_.keys())) // len(dict_)) + offset
+    # key_avg = (sum(map(len, dict_.keys())) // len(dict_)) + offset
+    #
+    # for key, val in ((k, v) for k, v in dict_.items() if v):
+    #     formatted = key if len(key) < key_avg else key[:key_avg - len(ellipsis_)] + ellipsis_
+    #     yield f"{formatted.ljust(key_avg)}: {val}"
 
     for key, val in ((k, v) for k, v in dict_.items() if v):
-        formatted = key if len(key) < key_avg else key[:key_avg - len(ellipsis_)] + ellipsis_
-        yield f"{formatted.ljust(key_avg)}: {val}"
+        yield f"[{key}]"
+        yield f":{val}"
+        yield " "
 
 
 def pad_actual_length(source: str, pad: str = "\u200b") -> Tuple[str, str]:
@@ -111,7 +114,6 @@ def fit_to_actual_width(text: str, length_lim: int) -> str:
 
 
 # ------------------------------------------------------------------
-# UI definition, using py-cui examples. Would've been nice if it followed PEP8.
 
 
 class AudioPlayer:
@@ -126,30 +128,31 @@ class AudioPlayer:
     def __init__(self, root: py_cui.PyCUI):
         self.root_ = root
 
+        # -- UI definitions
         # row-idx then col-idx, it's reversed x,y - reminder to self!
         self.audio_list = self.root_.add_scroll_menu("Files", 0, 0, column_span=5, row_span=3)
         self.meta_list = self.root_.add_scroll_menu("Meta", 0, 5, column_span=2, row_span=5)
 
         self.info_box = self.root_.add_text_box("Info", 3, 0, column_span=4)
         self.volume_slider = self.root_.add_slider("Volume", 3, 4, column_span=1, min_val=0, max_val=8, init_val=4)
-        self.handle_volume_patch()
-        self.volume_slider.toggle_border()
-        self.volume_slider.toggle_title()
-        self.volume_slider.toggle_value()
-        self.volume_slider.set_bar_char("█")
 
         self.play_btn = self.root_.add_button("Play", 4, 0, command=self.play_cb_space_bar)
         self.stop_btn = self.root_.add_button("Stop", 4, 1, command=self.stop_cb)
         self.reload_btn = self.root_.add_button("Reload", 4, 2, command=self.reload_cb)
 
-        self.reserved_1 = self.root_.add_button("reserved", 4, 3)
-        self.reserved_2 = self.root_.add_button("reserved", 4, 4)
+        self.reserved_1 = self.root_.add_button("Previous", 4, 3)
+        self.reserved_2 = self.root_.add_button("Next", 4, 4, command=self.on_next_track_click)
 
         # just for ease of clearing
         self.clear_target = [self.audio_list, self.meta_list, self.info_box]
 
-        # add callback to update metadata on every redraw.
+        # -- UI setup
         add_callback_patch(self.audio_list, self.on_file_click)
+        self.handle_volume_patch()
+        self.volume_slider.toggle_border()
+        self.volume_slider.toggle_title()
+        self.volume_slider.toggle_value()
+        self.volume_slider.set_bar_char("█")
 
         # Key binds
         self.audio_list.add_key_command(py_cui.keys.KEY_ENTER, self.play_cb_enter)
@@ -178,6 +181,12 @@ class AudioPlayer:
             self.update_meta(clear=True)
         else:
             self.update_meta()
+
+    def on_next_track_click(self):
+        self.stream.stop_stream(set_flag=False)
+
+    def on_previous_track_click(self):
+        pass
 
     # Media control callback definitions -----------------------
     # TODO: fix malfunctioning play next when force-starting different tracks mid-playing.
@@ -215,6 +224,7 @@ class AudioPlayer:
 
     def play_stream(self, audio_idx=None) -> int:
         """Load audio and starts audio stream. Returns True if successful."""
+
         if not audio_idx:
             audio_idx = self.selected_idx
 
@@ -247,7 +257,6 @@ class AudioPlayer:
             self.write_info("")
 
     def refresh_list(self, search_files=True):
-        # save current view
         self.audio_list.clear()
 
         if search_files:
@@ -288,7 +297,7 @@ class AudioPlayer:
 
         # Extract metadata
         ordered = extract_metadata(self.selected_track)
-        self.write_meta_list(audio_list_str_gen(ordered))
+        self.write_meta_list(meta_list_str_gen(ordered))
 
     def handle_volume_patch(self):
         original = self.volume_slider._handle_key_press

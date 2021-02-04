@@ -33,15 +33,15 @@ class StreamManager(StreamManagerABC):
         return self.stream_state.load_stream(self, audio_location)
 
     def start_stream(self):
-        self. stop_flag = False
+        self.stop_flag = False
         return self.stream_state.start_stream(self)
 
-    def stop_stream(self):
-        self.stop_flag = True
+    def stop_stream(self, set_flag=True):
+        self.stop_flag = False if set_flag else self.stop_flag
         return self.stream_state.stop_stream(self)
 
     def pause_stream(self):
-        self.stop_flag = True
+        self.stop_flag = not self.stop_flag
         return self.stream_state.pause_stream(self)
 
     def volume_up(self):

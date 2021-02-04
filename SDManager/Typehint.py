@@ -67,7 +67,7 @@ class StreamManagerABC(abc.ABC):
     def start_stream(self) -> None:
         pass
 
-    def stop_stream(self) -> None:
+    def stop_stream(self, set_flag=True) -> None:
         pass
 
     def pause_stream(self) -> None:
