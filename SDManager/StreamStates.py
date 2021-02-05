@@ -52,7 +52,7 @@ class StreamStoppedState(StreamState):
     @staticmethod
     def pause_stream(stream_manager: "StreamManagerABC"):
         stream_manager.stream.stop()
-        # raise RuntimeError("Stream is not active.")
+        raise RuntimeError("Stream is not active.")
 
     @staticmethod
     def start_stream(stream_manager: "StreamManagerABC"):
