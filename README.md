@@ -11,10 +11,46 @@ Just a tiny project to create a script that literally does its name.
 Only working configurations are Linux Terminal / CMD / Windows Terminal + WSL.
 Will show as broken on other configurations on Win10.
 
-Although this project strictly follow PEP8 at best, readability might not.
+Although this project strictly follow PEP8 at my best, readability might not.
 
 *0.0.3a - dev*  
 ![](Demo/Images/Demo.webp)
+
+---
+
+## Usage
+
+- Audio List (Widget)
+    - File explorer functionality: Select *DIR* marked items and press *Enter* to step in.
+    - Play audio file: Select Audio track and press *Enter* to play it. Stops the previous track if there was any.
+    - Pause audio file: Press *Space* to pause/resume track. Don't spam it or will overlap.
+
+- Meta (Widget)
+    - Scrolling up, down with arrow keys. Automatically display selected track's metadata.
+
+- Info (Widget)
+    - No interaction available.
+
+- Volume (Widget)
+    - Select, press *Left* or *Right* to adjust volume. This just change vector multiply factor, might distort audio.
+
+- Buttons
+    - Play
+      - Act as *Space* in *Audio List*.
+    - Stop
+      - Stops the current track and set playback to 0 second.  Resuming will play this stopped track from start.
+    - Reload
+      - Re-scan current folder. Stops the audio.
+    - Previous
+      - (Not implemented yet) Stop the current and play the previous track.
+    - Next
+      - Stop the current and play the next track.
+
+Select folder you want to go or audio file you want to play, punch Enter.
+Punching Enter again while playing will stop the currently playing track.
+
+Pressing Space bar in that AudioList widget or pressing "Play" button will pause the track.
+If there is no loaded audio then "Play" button, or space bar, will play the selected track.
 
 ---
 ## Background
@@ -46,7 +82,7 @@ Plus, this will be my first repo trying out git features such as milestones, iss
 This impressive pre-stone-age program does:
 - refresh audio list
 - show *part* of metadata (No joke!)
-- play & stop, half-broken pause.
+- Other checked stuff mentioned below.
 
 that's all.
 
