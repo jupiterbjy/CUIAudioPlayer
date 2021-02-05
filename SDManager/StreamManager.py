@@ -37,7 +37,7 @@ class StreamManager(StreamManagerABC):
         return self.stream_state.start_stream(self)
 
     def stop_stream(self, set_flag=True):
-        self.stop_flag = False if set_flag else self.stop_flag
+        self.stop_flag = True if set_flag else self.stop_flag
         return self.stream_state.stop_stream(self)
 
     def pause_stream(self):

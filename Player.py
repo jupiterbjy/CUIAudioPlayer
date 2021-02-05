@@ -26,8 +26,6 @@ except ImportError:
 assert CompatibilityPatch
 
 
-AUDIO_FOLDER = "audio_files"
-AUDIO_TYPES = ".ogg", ".mp3", ".m4a", ".flac"
 VERSION_TAG = "0.0.3a - dev"
 WINDOWS = platform == 'win32'
 
@@ -62,18 +60,14 @@ def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable) -> No
         setattr(widget_, target, patch_factory(getattr(widget_, target)))
 
 
-def meta_list_str_gen(dict_: Mapping, ellipsis_: str = "..", offset: int = 1) -> Generator[str, None, None]:
+def meta_list_str_gen(dict_: Mapping) -> Generator[str, None, None]:
     """
     Cuts text in avg. of given dict_'s keys.
+
     :param dict_: Mapping containing metadata.
-    :param ellipsis_: Suffix to use as ellipsis, when text is longer than avg.
-    :param offset: Offset to add / reduce max displayed length from avg.
+
+    :return: Generator[str, None, None]
     """
-    # key_avg = (sum(map(len, dict_.keys())) // len(dict_)) + offset
-    #
-    # for key, val in ((k, v) for k, v in dict_.items() if v):
-    #     formatted = key if len(key) < key_avg else key[:key_avg - len(ellipsis_)] + ellipsis_
-    #     yield f"{formatted.ljust(key_avg)}: {val}"
 
     for key, val in ((k, v) for k, v in dict_.items() if v):
         yield f"[{key}]"
@@ -85,6 +79,10 @@ def pad_actual_length(source: str, pad: str = "\u200b") -> Tuple[str, str]:
     """
     Determine real-displaying character length, and provide padding accordingly to match length.
     This way slicing will cut asian letters properly, not breaking tidy layouts.
+
+    :param source: Original string to be manipulated
+    :param pad: Default character to pad, default ZWSP.
+
     :return: padding character and padded string
     """
     if wcswidth(source) == len(source):
@@ -95,16 +93,17 @@ def pad_actual_length(source: str, pad: str = "\u200b") -> Tuple[str, str]:
             yield ch + pad if wcwidth(ch) == 2 else ch
 
     return pad, "".join(inner_gen(source.replace(pad, "")))
-    # WHAT'S WRONG WITH POWERSHELL AND WINDOWS TERMINAL? IT'S BAD THAN CMD ABOUT CURSES!
-    # TOOK WEEKS TO FIGURE OUT THIS, GJ MS
+    # WHAT'S WRONG WITH POWERSHELL & WINDOWS TERMINAL? IT'S BAD THAN CMD ABOUT CURSES!
+    # Expected to run in WSL + Windows Terminal, or purely CMD / Linux Terminal.
 
 
 def fit_to_actual_width(text: str, length_lim: int) -> str:
 
     padding, padded = pad_actual_length(text)
     limited = padded[:length_lim - 3]
+
     if wcwidth(limited[-1]) == 2:
-        # if so, last padding was wear off, so last 2-width character shouldn't be displayed.
+        # if so, last padding was chopped off, so last 2-width character shouldn't be displayed.
         limited = limited[:-1]
 
     if len(padded) > length_lim - 3:
