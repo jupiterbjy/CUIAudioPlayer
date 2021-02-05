@@ -40,8 +40,9 @@ def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable) -> No
     """
     Adding callback support for widget that lacks such as ScrollMenu.
 
-    :param widget_: Any widget you want to add callback on each update.
+    :param widget_: Any widget you want to add callback on each input events.
     :param callback: Any callables
+
     :return: None
     """
     # Seems like sequence is _draw -> _handle_mouse_press, so patching on _draw results 1 update behind.
@@ -62,7 +63,7 @@ def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable) -> No
 
 def meta_list_str_gen(dict_: Mapping) -> Generator[str, None, None]:
     """
-    Cuts text in avg. of given dict_'s keys.
+    Formats metadata. Returns generator that yields 3 lines per metadata entry.
 
     :param dict_: Mapping containing metadata.
 
@@ -81,7 +82,7 @@ def pad_actual_length(source: str, pad: str = "\u200b") -> Tuple[str, str]:
     This way slicing will cut asian letters properly, not breaking tidy layouts.
 
     :param source: Original string to be manipulated
-    :param pad: Default character to pad, default ZWSP.
+    :param pad: Default character to pad, default ZWSP
 
     :return: padding character and padded string
     """
@@ -93,8 +94,10 @@ def pad_actual_length(source: str, pad: str = "\u200b") -> Tuple[str, str]:
             yield ch + pad if wcwidth(ch) == 2 else ch
 
     return pad, "".join(inner_gen(source.replace(pad, "")))
-    # WHAT'S WRONG WITH POWERSHELL & WINDOWS TERMINAL? IT'S BAD THAN CMD ABOUT CURSES!
-    # Expected to run in WSL + Windows Terminal, or purely CMD / Linux Terminal.
+    # https://github.com/microsoft/terminal/issues/1472
+    # Windows Terminal + (Powershell/CMD) combo can't run this due to ZWSP width issue.
+    # Expected to run in purely CMD / Linux Terminal. or WSL + Windows Terminal.
+    # Tested on Xfce4 & CMD.
 
 
 def fit_to_actual_width(text: str, length_lim: int) -> str:
@@ -139,7 +142,7 @@ class AudioPlayer:
         self.stop_btn = self.root_.add_button("Stop", 4, 1, command=self.stop_cb)
         self.reload_btn = self.root_.add_button("Reload", 4, 2, command=self.reload_cb)
 
-        self.reserved_1 = self.root_.add_button("Previous", 4, 3)
+        self.reserved_1 = self.root_.add_button("Previous", 4, 3, command=lambda a=None: None)
         self.reserved_2 = self.root_.add_button("Next", 4, 4, command=self.on_next_track_click)
 
         # just for ease of clearing
@@ -197,6 +200,13 @@ class AudioPlayer:
         else:
             # force play audio
             with self.maintain_current_view():
+                try:
+                    self.stream.stop_stream()
+                except RuntimeError as err:
+                    logger.warning(str(err))
+                except FileNotFoundError:
+                    pass
+
                 if self.play_stream():
                     self.mark_as_playing(self.currently_playing)
 
@@ -362,10 +372,12 @@ class AudioPlayer:
 
     def show_progress(self, audio_info: StreamManager.AudioInfo, current_frame):
         # counting in some marginal errors of mismatching frames and total frames count.
+
         file_name = title if (title := audio_info.title) else self.path_wrapper[self.currently_playing].name
         max_frame = audio_info.total_frame
         duration = audio_info.duration_tag
         format_specifier = f"0{self.digit(duration)}.1f"
+
         self.write_info(f"[{current_frame * duration / max_frame:{format_specifier}}/{duration}] "
                         f"Playing now - {file_name}")
 
@@ -444,6 +456,7 @@ def draw_player():
     root.set_title(f"CUI Audio Player - v{VERSION_TAG}")
     # root.toggle_unicode_borders()
     root.set_widget_border_characters("╔", "╗", "╚", "╝", "═", "║")
+
     player_ref = AudioPlayer(root)
     assert player_ref  # Preventing unused variable check
 
