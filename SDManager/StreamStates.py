@@ -68,6 +68,7 @@ class StreamStoppedState(StreamState):
     @staticmethod
     def load_stream(stream_manager: "StreamManagerABC", audio_dir: str):
         logger.debug("Loading new file.")
+        logger.debug("Delegating to: StreamPlayingState.stop_stream")
         AudioUnloadedState.load_stream(stream_manager, audio_dir)
 
 
@@ -94,6 +95,7 @@ class StreamPlayingState(StreamState):
     @staticmethod
     def load_stream(stream_manager: "StreamManagerABC", audio_dir: str):
         logger.debug("Stopping and loading new audio.")
+        logger.debug("Delegating to: StreamPlayingState.stop_stream")
         StreamPlayingState.stop_stream(stream_manager)
         AudioUnloadedState.load_stream(stream_manager, audio_dir)
 
@@ -116,4 +118,7 @@ class StreamPausedState(StreamState):
 
     @staticmethod
     def load_stream(stream_manager: "StreamManagerABC", audio_dir: str):
-        pass
+        logger.debug("Stopping and loading new audio.")
+        logger.debug("Delegating to: StreamPlayingState.stop_stream")
+        StreamPlayingState.stop_stream(stream_manager)
+        AudioUnloadedState.load_stream(stream_manager, audio_dir)

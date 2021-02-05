@@ -145,8 +145,7 @@ class AudioPlayer:
         self.reserved_1 = self.root_.add_button("Previous", 4, 3, command=lambda a=None: None)
         self.reserved_2 = self.root_.add_button("Next", 4, 4, command=self.on_next_track_click)
 
-        # just for ease of clearing
-        self.clear_target = [self.audio_list, self.meta_list, self.info_box]
+        self.clear_target = (self.audio_list, self.meta_list, self.info_box)
 
         # -- UI setup
         add_callback_patch(self.audio_list, self.on_file_click)
@@ -156,24 +155,29 @@ class AudioPlayer:
         self.volume_slider.toggle_value()
         self.volume_slider.set_bar_char("█")
 
-        # Key binds
+        # -- Key binds
         self.audio_list.add_key_command(py_cui.keys.KEY_ENTER, self.play_cb_enter)
         self.audio_list.add_key_command(py_cui.keys.KEY_SPACE, self.play_cb_space_bar)
 
-        # add color rules - might be better implementing custom coloring methods, someday.
+        # -- add color rules - might be better implementing custom coloring methods, someday.
         self.audio_list.add_text_color_rule(r"[0-9 ].*" + self.symbols["play"], py_cui.WHITE_ON_YELLOW, "contains")
         self.audio_list.add_text_color_rule(r"[0-9 ].*" + self.symbols["pause"], py_cui.WHITE_ON_YELLOW, "contains")
         self.audio_list.add_text_color_rule(r"[0-9 ].*" + self.symbols["stop"], py_cui.WHITE_ON_YELLOW, "contains")
-        self.audio_list.add_text_color_rule(r"DIR", py_cui.CYAN_ON_BLACK, "startswith")
+        self.audio_list.add_text_color_rule(r"DIR", py_cui.CYAN_ON_BLACK, "startswith", include_whitespace=False)
+        self.info_box.add_text_color_rule("ERR:", py_cui.WHITE_ON_RED, "startswith")
+        # Below don't work!
         # self.audio_list.add_text_color_rule(r"DIR", py_cui.CYAN_ON_BLACK, "startswith", match_type="regex")
         # self.audio_list.add_text_color_rule(r"►", py_cui.WHITE_ON_YELLOW, "contains")
-        self.info_box.add_text_color_rule("ERR:", py_cui.WHITE_ON_RED, "startswith")
 
+        # -- Generator instance and states
         self.current_play_generator = None
         self.shuffle = False
 
+        # -- Path and stream instance
         self.stream: StreamManager.StreamManagerABC = StreamManager.StreamManager(self.show_progress, self.play_next)
         self.path_wrapper = PathWrapper()
+
+        # -- Initialize
         self.reload_cb()
 
     # Primary callbacks
@@ -244,7 +248,9 @@ class AudioPlayer:
             return False
 
         except RuntimeError as err:
-            self.write_info(f"ERR: {str(err).split(':')[-1]}")
+            msg = f"ERR: {str(err).split(':')[-1]}"
+            logger.warning(msg)
+            self.write_info(msg)
             return False
 
         self.refresh_list(search_files=False)
@@ -296,6 +302,7 @@ class AudioPlayer:
         for widget in self.clear_target:
             widget.clear()
 
+        self.stream = StreamManager.StreamManager(self.show_progress, self.play_next)
         self.refresh_list(search_files=True)
 
     # TODO: fetch metadata area's physical size and put line breaks or text cycling accordingly.
