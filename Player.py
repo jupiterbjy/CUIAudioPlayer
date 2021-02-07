@@ -36,7 +36,7 @@ def extract_metadata(abs_file_dir):
     return OrderedDict(filtered)
 
 
-def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable) -> None:
+def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable):
     """
     Adding callback support for widget that lacks such as ScrollMenu.
 
@@ -45,8 +45,8 @@ def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable) -> No
 
     :return: None
     """
-    # Seems like sequence is _draw -> _handle_mouse_press, so patching on _draw results 1 update behind.
-    # Therefore we need to patch both _handle_mouse_press and _handle_keyboard_press first.
+    # Sequence is _draw -> _handle_mouse_press, so patching on _draw results 1 update behind.
+    # Therefore we need to patch both _handle_mouse_press and _handle_keyboard_press.
 
     def patch_factory(old_func):
         # fix for late binding issue: stackoverflow.com/questions/3431676
@@ -142,8 +142,8 @@ class AudioPlayer:
         self.stop_btn = self.root_.add_button("Stop", 4, 1, command=self.stop_cb)
         self.reload_btn = self.root_.add_button("Reload", 4, 2, command=self.reload_cb)
 
-        self.reserved_1 = self.root_.add_button("Previous", 4, 3, command=lambda a=None: None)
-        self.reserved_2 = self.root_.add_button("Next", 4, 4, command=self.on_next_track_click)
+        self.prev_btn = self.root_.add_button("Reserved", 4, 3, command=lambda a=None: None)
+        self.next_btn = self.root_.add_button("Next", 4, 4, command=self.on_next_track_click)
 
         self.clear_target = (self.audio_list, self.meta_list, self.info_box)
 

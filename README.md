@@ -6,7 +6,7 @@
 
 ### *Still under heavy development! I'm testing this as much I can, but there will be ton of bugs!*
 
-Just a tiny project to create a script that literally does its name.
+Just a tiny project to create a script that literally does its name. Uses Master branch of py_cui currently.
 
 Only working configurations are Linux Terminal / CMD / Windows Terminal + WSL.
 Will show as broken on other configurations on Win10.
@@ -19,6 +19,10 @@ Although this project strictly follow PEP8 at my best, readability might not.
 ---
 
 ## Usage
+
+You might want to change codepage when running on CMD. That way you can use utf-8 supported fonts.
+
+To do this, just type ```chcp 65001``` on CMD, then right click, properties and change font.
 
 - Audio List (Widget)
     - File explorer functionality: Select *DIR* marked items and press *Enter* to step in.
