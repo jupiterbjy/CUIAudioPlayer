@@ -41,7 +41,10 @@ def get_caller_stack_and_association(depth=1):
                 continue
 
     actual_function_ref = get_reference_filter()
-    return actual_function_ref.__qualname__
+    try:
+        return actual_function_ref.__qualname__
+    except AttributeError:
+        return "<Module>"
 
 # https://stackoverflow.com/questions/52715425
 

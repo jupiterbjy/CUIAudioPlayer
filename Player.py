@@ -1,7 +1,11 @@
-import sounddevice as sd
+from __future__ import annotations
+from typing import TYPE_CHECKING, Callable, Mapping, Generator, Iterable, Tuple
+if TYPE_CHECKING:
+    from SDManager import AudioObject
+    import pathlib
+
 import py_cui
 import array
-import pathlib
 import functools
 import itertools
 from contextlib import contextmanager
@@ -9,7 +13,6 @@ from collections import OrderedDict
 from tinytag import TinyTag
 from wcwidth import wcswidth, wcwidth
 from sys import platform
-from typing import Callable, Mapping, Generator, Iterable, Tuple
 
 from LoggingConfigurator import logger
 import CompatibilityPatch
@@ -27,7 +30,7 @@ assert CompatibilityPatch
 
 
 VERSION_TAG = "0.0.3a - dev"
-WINDOWS = platform == 'win32'
+logger.debug(f"Platform: {platform} Version: {VERSION_TAG}")
 
 
 def extract_metadata(abs_file_dir):
@@ -139,8 +142,8 @@ class AudioPlayer:
         self.volume_slider = self.root_.add_slider("Volume", 3, 4, column_span=1, min_val=0, max_val=8, init_val=4)
 
         self.play_btn = self.root_.add_button("Play", 4, 0, command=self.play_cb_space_bar)
-        self.stop_btn = self.root_.add_button("Stop", 4, 1, command=self.stop_cb)
-        self.reload_btn = self.root_.add_button("Reload", 4, 2, command=self.reload_cb)
+        self.stop_btn = self.root_.add_button("Stop", 4, 1, command=self.on_stop_click)
+        self.reload_btn = self.root_.add_button("Reload", 4, 2, command=self.on_reload_click)
 
         self.prev_btn = self.root_.add_button("Reserved", 4, 3, command=lambda a=None: None)
         self.next_btn = self.root_.add_button("Next", 4, 4, command=self.on_next_track_click)
@@ -171,14 +174,15 @@ class AudioPlayer:
 
         # -- Generator instance and states
         self.current_play_generator = None
+        self.current_name_cycler = None
         self.shuffle = False
 
         # -- Path and stream instance
-        self.stream: StreamManager.StreamManagerABC = StreamManager.StreamManager(self.show_progress, self.play_next)
+        self.stream: StreamManager = StreamManager.StreamManager(self.show_progress_wrapper(), self.play_next)
         self.path_wrapper = PathWrapper()
 
         # -- Initialize
-        self.reload_cb()
+        self.on_reload_click()
 
     # Primary callbacks
 
@@ -189,18 +193,41 @@ class AudioPlayer:
             self.update_meta()
 
     def on_next_track_click(self):
-        self.stream.stop_stream(set_flag=False)
+        self.stream.stop_stream(run_finished_callback=False)
 
     def on_previous_track_click(self):
         pass
 
+    def on_stop_click(self):
+        try:
+            self.stream.stop_stream()
+        except (RuntimeError, FileNotFoundError):
+            return
+
+        with self.maintain_current_view():
+            # revert texts
+            self.refresh_list(search_files=False)
+            self.mark_as_stopped(self.currently_playing)
+            self.write_info("")
+
+    def on_reload_click(self):
+        self.on_stop_click()
+
+        # clear widgets
+
+        for widget in self.clear_target:
+            widget.clear()
+
+        self.stream = StreamManager.StreamManager(self.show_progress_wrapper(), self.play_next)
+        self.refresh_list(search_files=True)
+
     # Media control callback definitions -----------------------
-    # TODO: fix malfunctioning play next when force-starting different tracks mid-playing.
+    # TODO: Refactor to state machine
 
     def play_cb_enter(self):
         if self.selected_track in self.path_wrapper.folder_list:
             self.path_wrapper.step_in(self.selected_track)
-            self.reload_cb()
+            self.on_reload_click()
         else:
             # force play audio
             with self.maintain_current_view():
@@ -259,18 +286,6 @@ class AudioPlayer:
 
         return True
 
-    def stop_cb(self):
-        try:
-            self.stream.stop_stream()
-        except (RuntimeError, FileNotFoundError):
-            return
-
-        with self.maintain_current_view():
-            # revert texts
-            self.refresh_list(search_files=False)
-            self.mark_as_stopped(self.currently_playing)
-            self.write_info("")
-
     def refresh_list(self, search_files=True):
         self.audio_list.clear()
 
@@ -293,17 +308,6 @@ class AudioPlayer:
         self.write_info(f"Found {len(self.path_wrapper.audio_file_list)} file(s).")
         self.audio_list.set_title(f"Audio List - "
                                   f"{len(self.path_wrapper.audio_file_list)} track(s)")
-
-    def reload_cb(self):
-        self.stop_cb()
-
-        # clear widgets
-
-        for widget in self.clear_target:
-            widget.clear()
-
-        self.stream = StreamManager.StreamManager(self.show_progress, self.play_next)
-        self.refresh_list(search_files=True)
 
     # TODO: fetch metadata area's physical size and put line breaks or text cycling accordingly.
     def update_meta(self, clear=False):
@@ -354,6 +358,7 @@ class AudioPlayer:
         self.write_audio_list(source)
 
     def mark_as_playing(self, track_idx):
+        # Mark the track on the audio list, and initialize name cycling generator
         if self.stream.stream_state == StreamStates.StreamStoppedState:
             self.mark_target(track_idx, self.symbols["stop"], self.symbols["play"])
         else:
@@ -372,21 +377,23 @@ class AudioPlayer:
         else:
             self.mark_target(track_idx, self.symbols["play"], self.symbols["stop"])
 
-    @staticmethod
-    @functools.lru_cache(256)
-    def digit(int_):
-        return len(str(int_))
+    def show_progress_wrapper(self):
 
-    def show_progress(self, audio_info: StreamManager.AudioInfo, current_frame):
-        # counting in some marginal errors of mismatching frames and total frames count.
+        def digit(int_):
+            return len(str(int_))
 
-        file_name = title if (title := audio_info.title) else self.path_wrapper[self.currently_playing].name
-        max_frame = audio_info.total_frame
-        duration = audio_info.duration_tag
-        format_specifier = f"0{self.digit(duration)}.1f"
+        def show_progress(audio_info: AudioObject.AudioInfo, current_frame):
+            # counting in some marginal errors of mismatching frames and total frames count.
 
-        self.write_info(f"[{current_frame * duration / max_frame:{format_specifier}}/{duration}] "
-                        f"Playing now - {file_name}")
+            file_name = title if (title := audio_info.title) else self.path_wrapper[self.currently_playing].name
+            max_frame = audio_info.total_frame
+            duration = audio_info.duration_tag
+            format_specifier = f"0{digit(duration)}.1f"
+
+            self.write_info(f"[{current_frame * duration / max_frame:{format_specifier}}/{duration}] "
+                            f"Playing now - {file_name}")
+
+        return show_progress
 
     # Playlist control callback --------------------------------
 
@@ -471,10 +478,7 @@ def draw_player():
 
 
 def main():
-    try:
-        draw_player()
-    finally:
-        sd.stop()
+    draw_player()
 
 
 if __name__ == '__main__':

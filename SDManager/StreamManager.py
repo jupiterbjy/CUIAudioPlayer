@@ -1,12 +1,14 @@
-import sounddevice as sd
-from typing import Callable, Type
+from __future__ import annotations
+from typing import TYPE_CHECKING, Callable, Type
+if TYPE_CHECKING:
+    from .AudioObject import AudioInfo
+    import sounddevice as sd
 
+from .StreamStates import StreamState, AudioUnloadedState
 from LoggingConfigurator import logger
-from .StreamStates import StreamState, AudioUnloadedState, AudioInfo
-from .Typehint import StreamManagerABC
 
 
-class StreamManager(StreamManagerABC):
+class StreamManager:
     def __init__(self, stream_callback: Callable = None, finished_callback: Callable = None, callback_every_n=2):
         self.callback_minimum_cycle = callback_every_n
 
@@ -36,8 +38,8 @@ class StreamManager(StreamManagerABC):
         self.stop_flag = False
         return self.stream_state.start_stream(self)
 
-    def stop_stream(self, set_flag=True):
-        self.stop_flag = True if set_flag else self.stop_flag
+    def stop_stream(self, run_finished_callback=True):
+        self.stop_flag = True if run_finished_callback else self.stop_flag
         return self.stream_state.stop_stream(self)
 
     def pause_stream(self):
@@ -57,17 +59,3 @@ class StreamManager(StreamManagerABC):
             self.stream_state.stop_stream(self)
         except (RuntimeError, FileNotFoundError):
             pass
-
-
-if __name__ == '__main__':
-    def test():
-        from StreamManager import StreamManagerABC
-        audio_location_1 = r"E:\github\CUIAudioPlayer\audio_files\short_sample_okayu_rejection.ogg"
-        audio_location_2 = r"E:\github\CUIAudioPlayer\audio_files\Higher's High   ナナヲアカリ.ogg"
-        ref = StreamManagerABC()
-        ref.load_stream(audio_location_2)
-        ref.start_stream()
-
-        # Originally meant to hold doctest, but it was inconvenience to copy-pasting so remove it.
-
-    # Try this in python console. of course change the audio.

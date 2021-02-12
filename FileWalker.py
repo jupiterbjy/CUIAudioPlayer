@@ -65,8 +65,11 @@ class PathWrapper:
         return self.current_path
 
     def refresh_list(self):
-        self.audio_file_list = list(self.list_audio())
-        self.folder_list = list(self.list_folder())
+        self.audio_file_list.clear()
+        self.folder_list.clear()
+
+        self.audio_file_list.extend(self.list_audio())
+        self.folder_list.extend(self.list_folder())
 
     def fetch_meta(self):
         # This might have to deal the cases such as path changing before generator fires up.

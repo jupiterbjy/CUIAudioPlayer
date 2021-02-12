@@ -1,12 +1,15 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING, Callable, Type
+if TYPE_CHECKING:
+    from .StreamManager import StreamManager
+    from .StreamStates import StreamState
+
 import sounddevice as sd
 import itertools
-from typing import Callable, Type
-
-from .Typehint import StreamManagerABC, StreamState
 from LoggingConfigurator import logger
 
 
-def stream_callback_closure(stream_manager: "StreamManagerABC", raw=False) -> Callable:
+def stream_callback_closure(stream_manager: StreamManager, raw=False) -> Callable:
     # Collecting names here to reduce call overhead.
     last_frame = -1
     dtype = sd.default.dtype[1]
@@ -65,7 +68,7 @@ def stream_callback_closure(stream_manager: "StreamManagerABC", raw=False) -> Ca
     return stream_cb_raw if raw else stream_cb
 
 
-def finished_callback_wrapper(stream_manager: "StreamManagerABC", new_next_state: Type[StreamState]):
+def finished_callback_wrapper(stream_manager: StreamManager, new_next_state: Type[StreamState]):
     def callback():
         logger.debug(f"Playback finished. Stop flag: {stream_manager.stop_flag}")
         stream_manager.new_state(new_next_state)
