@@ -4,19 +4,20 @@ Currently using master branch of py_cui.
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Mapping, Generator, Iterable, Tuple
-import py_cui
+from typing import TYPE_CHECKING, Callable, Mapping, Generator, Iterable, Tuple, Any
+from sys import platform
 import array
 import functools
 import itertools
+
 from contextlib import contextmanager
 from collections import OrderedDict
 from tinytag import TinyTag
 from wcwidth import wcswidth, wcwidth
-from sys import platform
+import py_cui
 
-from LoggingConfigurator import logger
 import CompatibilityPatch
+from LoggingConfigurator import logger
 from SDManager import StreamManager, StreamStates
 from FileWalker import PathWrapper
 
@@ -175,8 +176,13 @@ class AudioPlayer:
         self.clear_target = (self.audio_list, self.meta_list, self.info_box)
 
         # -- UI setup
+        def volume_callback():
+            nonlocal self
+            self.stream.multiplier = self.stream.step * self.volume_slider.get_slider_value()
+
         add_callback_patch(self.audio_list, self.on_file_click)
-        self.handle_volume_patch()
+        add_callback_patch(self.volume_slider, volume_callback, keypress_only=True)
+
         self.volume_slider.toggle_border()
         self.volume_slider.toggle_title()
         self.volume_slider.toggle_value()
@@ -212,9 +218,9 @@ class AudioPlayer:
 
     def on_file_click(self):
         if self.selected_track in self.path_wrapper.folder_list:
-            self.clear_meta()
+            self._clear_meta()
         else:
-            self.update_meta()
+            self._update_meta()
 
     def on_next_track_click(self):
         self.stream.stop_stream(run_finished_callback=False)
@@ -230,7 +236,7 @@ class AudioPlayer:
 
         with self.maintain_current_view():
             # revert texts
-            self.refresh_list(search_files=False)
+            self._refresh_list(search_files=False)
             self.mark_as_stopped(self.currently_playing)
             self.write_info("")
 
@@ -243,7 +249,7 @@ class AudioPlayer:
             widget.clear()
 
         self.stream = StreamManager.StreamManager(self.show_progress_wrapper(), self.play_next)
-        self.refresh_list(search_files=True)
+        self._refresh_list(search_files=True)
 
     # Media control callback definitions -----------------------
     # TODO: Refactor to state machine
@@ -274,6 +280,7 @@ class AudioPlayer:
         Determine actions depending on selected item when space bar is pressed on audio list.
         Also a callback for Play Button.
         """
+
         with self.maintain_current_view():
             try:
                 # assuming State: Paused
@@ -291,7 +298,11 @@ class AudioPlayer:
                     self.mark_as_playing(self.currently_playing)
 
     def play_stream(self, audio_idx=None) -> int:
-        """Load audio and starts audio stream. Returns True if successful."""
+        """
+        Load audio and starts audio stream. Returns True if successful.
+
+        :param audio_idx: If not None, will play given index of track instead
+        """
 
         if not audio_idx:
             audio_idx = self.selected_idx
@@ -308,19 +319,20 @@ class AudioPlayer:
             self.write_info(msg)
             return False
 
-        self.refresh_list(search_files=False)
+        self._refresh_list(search_files=False)
         self.stream.start_stream()
         self.init_playlist()
 
         return True
 
-    def refresh_list(self, search_files=True):
+    def _refresh_list(self, search_files=True):
         """
         Refresh directory contents. If search_files is True, will also update cached files list.
         Will separate this after changing list generating method to use internal item list of ScrollWidget.
 
         :param search_files: Flag whether to update cached files list
         """
+
         self.audio_list.clear()
 
         if search_files:
@@ -344,35 +356,30 @@ class AudioPlayer:
                                   f"{len(self.path_wrapper.audio_file_list)} track(s)")
 
     # TODO: fetch metadata area's physical size and put line breaks or text cycling accordingly.
-    def update_meta(self):
+    def _update_meta(self):
         """
         Updates metadata to show selected item.
         """
+
         ordered = extract_metadata(self.selected_track)
         self.write_meta_list(meta_list_str_gen(ordered))
 
-    def clear_meta(self):
+    def _clear_meta(self):
         """
         Clears meta list. Unified interface purpose.
         """
+
         self.meta_list.clear()
-
-    def handle_volume_patch(self):
-        """
-        Patch the handler to
-        :return:
-        """
-        original = self.volume_slider._handle_key_press
-
-        def handler(handle_key_press):
-            original(handle_key_press)
-            self.stream.multiplier = self.stream.step * self.volume_slider.get_slider_value()
-
-        self.volume_slider._handle_key_press = handler
 
     # Implementation / helper / wrappers -----------------------
 
     def write_info(self, text: str):
+        """
+        Writes text to info TextBox.
+
+        :param text: text to write on TextBox
+        """
+
         if text:
             # Will have hard time to implement cycling texts.
             fit_text = fit_to_actual_width(str(text), self.get_absolute_size(self.info_box)[-1])
@@ -381,7 +388,14 @@ class AudioPlayer:
             self.info_box.clear()
             # Sometimes you just want to unify interfaces.
 
-    def write_scroll_wrapped(self, lines: Iterable, widget: py_cui.widgets.ScrollMenu):
+    def _write_to_scroll_widget(self, lines: Iterable, widget: py_cui.widgets.ScrollMenu):
+        """
+        Internal function that handles writing on scroll widget.
+
+        :param lines: lines to write on audio_list
+        :param widget: ScrollMenu Widget to write on
+        """
+
         widget.clear()
         offset = -1
         _, usable_x = self.get_absolute_size(widget)
@@ -389,37 +403,80 @@ class AudioPlayer:
             widget.add_item(fit_to_actual_width(line_, usable_x + offset))
 
     def write_meta_list(self, lines: Iterable):
-        self.write_scroll_wrapped(lines, self.meta_list)
+        """
+        writes to the meta_list.
+
+        :param lines: lines to write on audio_list
+        """
+
+        self._write_to_scroll_widget(lines, self.meta_list)
 
     def write_audio_list(self, lines: Iterable):
-        self.write_scroll_wrapped(lines, self.audio_list)
+        """
+        writes to the audio_list.
 
-    def mark_target(self, track_idx, search_target: str, replace_target: str):
+        :param lines: lines to write on audio_list
+        """
+
+        self._write_to_scroll_widget(lines, self.audio_list)
+
+    def _mark_target(self, track_idx, search_target: str, replace_target: str):
+        """
+        internal function that changes search_target in line at index to replace_target.
+
+        :param track_idx: index of item to mark
+        :param search_target: string to search
+        :param replace_target: string to replace with
+        """
+
         source = self.audio_list.get_item_list()
         source[track_idx] = source[track_idx].replace(search_target, replace_target)
         self.write_audio_list(source)
 
     def mark_as_playing(self, track_idx):
+        """
+        Set line at given index to playing state
+
+        :param track_idx: index of item to mark
+        """
+
         # Mark the track on the audio list, and initialize name cycling generator
         if self.stream.stream_state == StreamStates.StreamStoppedState:
-            self.mark_target(track_idx, self.symbols["stop"], self.symbols["play"])
+            self._mark_target(track_idx, self.symbols["stop"], self.symbols["play"])
         else:
-            self.mark_target(track_idx, "|", self.symbols["play"])
+            self._mark_target(track_idx, "|", self.symbols["play"])
 
     def mark_as_paused(self, track_idx):
+        """
+        Set line at given index to paused state
+
+        :param track_idx: index of item to mark
+        """
+
         if self.stream.stream_state == StreamStates.StreamPausedState:
-            self.mark_target(track_idx, self.symbols["play"], self.symbols["pause"])
+            self._mark_target(track_idx, self.symbols["play"], self.symbols["pause"])
         else:
-            self.mark_target(track_idx, self.symbols["pause"], self.symbols["play"])
+            self._mark_target(track_idx, self.symbols["pause"], self.symbols["play"])
             # This fits more to mark_as_playing, but consequences does not allow to do so, for now.
 
     def mark_as_stopped(self, track_idx):
-        if self.stream.stream_state == StreamStates.StreamPausedState:
-            self.mark_target(track_idx, self.symbols["pause"], self.symbols["stop"])
-        else:
-            self.mark_target(track_idx, self.symbols["play"], self.symbols["stop"])
+        """
+        Set line at given index to stopped state
 
-    def show_progress_wrapper(self):
+        :param track_idx: index of item to mark
+        """
+
+        if self.stream.stream_state == StreamStates.StreamPausedState:
+            self._mark_target(track_idx, self.symbols["pause"], self.symbols["stop"])
+        else:
+            self._mark_target(track_idx, self.symbols["play"], self.symbols["stop"])
+
+    def show_progress_wrapper(self) -> Callable[[AudioObject.AudioInfo, Any], None]:
+        """
+        Wrapper for function that handles progress. Returning callable is meant to run in sounddevice callback.
+
+        :return:
+        """
 
         def digit(int_):
             return len(str(int_))
@@ -440,8 +497,10 @@ class AudioPlayer:
     # Playlist control callback --------------------------------
 
     def init_playlist(self):
-        # if self.shuffle:
-        #     self.current_play_generator =
+        """
+        Create itertools.cycle generator that acts as a playlist
+        """
+
         # Shuffling is harder than imagined!
         # https://engineering.atspotify.com/2014/02/28/how-to-shuffle-songs/
 
@@ -450,12 +509,13 @@ class AudioPlayer:
             next(cycle_gen)
 
         self.current_play_generator = cycle_gen
-        # self.current_play_generator = itertools.dropwhile(lambda x: x <= self.currently_playing, cycle_gen)
-
         logger.debug("Initialized playlist generator.")
 
     def play_next(self):
-        # There's no way to stop this when error is on UI side
+        """
+        Play next track. Called by finished callback of sounddevice when conditions are met.
+        """
+
         logger.debug(f"Condition: {self.stream.stop_flag}")
 
         if not self.stream.stop_flag:
@@ -477,20 +537,44 @@ class AudioPlayer:
     # Helper functions -----------------------------------------
 
     def get_absolute_size(self, widget: py_cui.widgets.Widget) -> Tuple[int, int]:
+        """
+        Get absolute dimensions of widget including borders.
+
+        :param widget: widget instance to get dimensions of
+        :return: y-height and x-height
+        """
+
         abs_y, abs_x = widget.get_absolute_dimensions()
         return abs_y - self.usable_offset_y, abs_x - self.usable_offset_x
 
     @property
     def selected_idx(self) -> int:
+        """
+        Returns index of selected track. Convenient method.
+
+        :return: index of selected track.
+        """
+
         return self.audio_list.get_selected_item_index()
 
     @property
     def selected_track(self) -> pathlib.Path:
-        # logger.debug(f"selected track: {self.path_wrapper[self.selected_idx]}, idx: {self.selected_idx}")
+        """
+        Returns name of selected track. Convenient method.
+
+        :return: Path object representing selected audio file.
+        """
+
         return self.path_wrapper[self.selected_idx]
 
     @property
     def currently_playing(self) -> int:
+        """
+        Returns index of currently played track. Currently using slow method for simplicity.
+
+        :return: index of played file
+        """
+
         file_name = self.stream.audio_info.loaded_data.name
         return self.path_wrapper.index(file_name)
 
@@ -498,7 +582,9 @@ class AudioPlayer:
     def maintain_current_view(self):
         """
         Remembers indices of both `selected / visible top item` and restores it.
+        Will not be necessary when directly manipulating ScrollWidget's internal item list.
         """
+
         current_idx = self.audio_list.get_selected_item_index()
         visible_idx = self.audio_list._top_view
         try:
@@ -529,6 +615,7 @@ def main():
     """
     Interface purpose wrapper
     """
+
     draw_player()
 
 
