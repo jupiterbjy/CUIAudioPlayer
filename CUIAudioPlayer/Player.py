@@ -1,9 +1,10 @@
+"""
+Main CUI(TUI) interface definitions.
+Currently using master branch of py_cui.
+"""
+
 from __future__ import annotations
 from typing import TYPE_CHECKING, Callable, Mapping, Generator, Iterable, Tuple
-if TYPE_CHECKING:
-    from SDManager import AudioObject
-    import pathlib
-
 import py_cui
 import array
 import functools
@@ -18,6 +19,10 @@ from LoggingConfigurator import logger
 import CompatibilityPatch
 from SDManager import StreamManager, StreamStates
 from FileWalker import PathWrapper
+
+if TYPE_CHECKING:
+    from SDManager import AudioObject
+    import pathlib
 
 try:
     # noinspection PyUnresolvedReferences
@@ -34,19 +39,25 @@ logger.debug(f"Platform: {platform} Version: {VERSION_TAG}")
 
 
 def extract_metadata(abs_file_dir):
+    """
+    Extracts metadata as OrderedDict.
+
+    :param abs_file_dir: absolute location of audio file
+
+    :return: OrderedDict[str, Any]
+    """
     tag = TinyTag.get(abs_file_dir)
     filtered = sorted(((k, v) for k, v in tag.as_dict().items() if v))
     return OrderedDict(filtered)
 
 
-def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable):
+def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable, keypress_only=False):
     """
     Adding callback support for widget that lacks such as ScrollMenu.
 
     :param widget_: Any widget you want to add callback on each input events.
     :param callback: Any callables
-
-    :return: None
+    :param keypress_only: Decides whether to replace mouse input handler alongside with key input one.
     """
     # Sequence is _draw -> _handle_mouse_press, so patching on _draw results 1 update behind.
     # Therefore we need to patch both _handle_mouse_press and _handle_keyboard_press.
@@ -60,8 +71,9 @@ def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable):
 
         return wrapper
 
-    for target in ("_handle_key_press", "_handle_mouse_press"):
-        setattr(widget_, target, patch_factory(getattr(widget_, target)))
+    setattr(widget_, "_handle_key_press", patch_factory(getattr(widget_, "_handle_key_press")))
+    if not keypress_only:
+        setattr(widget_, "_handle_mouse_press", patch_factory(getattr(widget_, "_handle_mouse_press")))
 
 
 def meta_list_str_gen(dict_: Mapping) -> Generator[str, None, None]:
@@ -89,12 +101,13 @@ def pad_actual_length(source: str, pad: str = "\u200b") -> Tuple[str, str]:
 
     :return: padding character and padded string
     """
+
     if wcswidth(source) == len(source):
         return pad, source
 
     def inner_gen(source_: str) -> Generator[str, None, None]:
-        for ch in source_:
-            yield ch + pad if wcwidth(ch) == 2 else ch
+        for char in source_:
+            yield char + pad if wcwidth(char) == 2 else char
 
     return pad, "".join(inner_gen(source.replace(pad, "")))
     # https://github.com/microsoft/terminal/issues/1472
@@ -104,8 +117,16 @@ def pad_actual_length(source: str, pad: str = "\u200b") -> Tuple[str, str]:
 
 
 def fit_to_actual_width(text: str, length_lim: int) -> str:
+    """
+    Cuts given text with varying character width to fit inside given width.
 
-    padding, padded = pad_actual_length(text)
+    :param text: Source text
+    :param length_lim: length limit in 1-width characters
+
+    :return: cut string
+    """
+
+    _, padded = pad_actual_length(text)
     limited = padded[:length_lim - 3]
 
     if wcwidth(limited[-1]) == 2:
@@ -122,9 +143,12 @@ def fit_to_actual_width(text: str, length_lim: int) -> str:
 
 
 class AudioPlayer:
+    """
+    Main TUI Class containing UI definitions and controls.
+    """
+
     ellipsis_ = ".."  # 3 dots 2 long
     usable_offset_y, usable_offset_x = 2, 6  # Excl. Border, Spacing of widget from abs size.
-    next_audio_delay = 1  # not sure yet how to implement this in main thread without spawning one.
 
     symbols = {"play": "⏵", "pause": "⏸", "stop": "⏹"}
 
@@ -188,7 +212,7 @@ class AudioPlayer:
 
     def on_file_click(self):
         if self.selected_track in self.path_wrapper.folder_list:
-            self.update_meta(clear=True)
+            self.clear_meta()
         else:
             self.update_meta()
 
@@ -225,6 +249,10 @@ class AudioPlayer:
     # TODO: Refactor to state machine
 
     def play_cb_enter(self):
+        """
+        Enters directory if selected item is one of them. Else will stop current track and play selected track.
+        """
+
         if self.selected_track in self.path_wrapper.folder_list:
             self.path_wrapper.step_in(self.selected_track)
             self.on_reload_click()
@@ -287,6 +315,12 @@ class AudioPlayer:
         return True
 
     def refresh_list(self, search_files=True):
+        """
+        Refresh directory contents. If search_files is True, will also update cached files list.
+        Will separate this after changing list generating method to use internal item list of ScrollWidget.
+
+        :param search_files: Flag whether to update cached files list
+        """
         self.audio_list.clear()
 
         if search_files:
@@ -310,16 +344,24 @@ class AudioPlayer:
                                   f"{len(self.path_wrapper.audio_file_list)} track(s)")
 
     # TODO: fetch metadata area's physical size and put line breaks or text cycling accordingly.
-    def update_meta(self, clear=False):
-        if clear:
-            self.meta_list.clear()
-            return
-
-        # Extract metadata
+    def update_meta(self):
+        """
+        Updates metadata to show selected item.
+        """
         ordered = extract_metadata(self.selected_track)
         self.write_meta_list(meta_list_str_gen(ordered))
 
+    def clear_meta(self):
+        """
+        Clears meta list. Unified interface purpose.
+        """
+        self.meta_list.clear()
+
     def handle_volume_patch(self):
+        """
+        Patch the handler to
+        :return:
+        """
         original = self.volume_slider._handle_key_press
 
         def handler(handle_key_press):
@@ -410,7 +452,7 @@ class AudioPlayer:
         self.current_play_generator = cycle_gen
         # self.current_play_generator = itertools.dropwhile(lambda x: x <= self.currently_playing, cycle_gen)
 
-        logger.debug(f"Initialized playlist generator.")
+        logger.debug("Initialized playlist generator.")
 
     def play_next(self):
         # There's no way to stop this when error is on UI side
@@ -454,7 +496,9 @@ class AudioPlayer:
 
     @contextmanager
     def maintain_current_view(self):
-        """Remembers indices of both `selected / visible top item` and restores it."""
+        """
+        Remembers indices of both `selected / visible top item` and restores it.
+        """
         current_idx = self.audio_list.get_selected_item_index()
         visible_idx = self.audio_list._top_view
         try:
@@ -465,11 +509,15 @@ class AudioPlayer:
 
 
 def draw_player():
+    """
+    TUI driver
+    """
+
     root = py_cui.PyCUI(5, 7)
-    root.set_refresh_timeout(0.1)  # this don't have to be a second. Might be an example of downside of ABC
     root.set_title(f"CUI Audio Player - v{VERSION_TAG}")
-    # root.toggle_unicode_borders()
     root.set_widget_border_characters("╔", "╗", "╚", "╝", "═", "║")
+    root.set_refresh_timeout(0.1)
+    # this don't have to be a second. Might be an example of downside of ABC
 
     player_ref = AudioPlayer(root)
     assert player_ref  # Preventing unused variable check
@@ -478,6 +526,9 @@ def draw_player():
 
 
 def main():
+    """
+    Interface purpose wrapper
+    """
     draw_player()
 
 
