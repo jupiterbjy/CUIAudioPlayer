@@ -47,6 +47,7 @@ def extract_metadata(abs_file_dir):
 
     :return: OrderedDict[str, Any]
     """
+
     tag = TinyTag.get(abs_file_dir)
     filtered = sorted(((k, v) for k, v in tag.as_dict().items() if v))
     return OrderedDict(filtered)
@@ -60,6 +61,7 @@ def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable, keypr
     :param callback: Any callables
     :param keypress_only: Decides whether to replace mouse input handler alongside with key input one.
     """
+
     # Sequence is _draw -> _handle_mouse_press, so patching on _draw results 1 update behind.
     # Therefore we need to patch both _handle_mouse_press and _handle_keyboard_press.
 
@@ -217,30 +219,50 @@ class AudioPlayer:
     # Primary callbacks
 
     def on_file_click(self):
+        """
+        Callback for clicking an item from audio_list.
+        """
+
         if self.selected_track in self.path_wrapper.folder_list:
             self._clear_meta()
         else:
             self._update_meta()
 
     def on_next_track_click(self):
+        """
+        Callback for clicking next track button.
+        """
+
         self.stream.stop_stream(run_finished_callback=False)
 
     def on_previous_track_click(self):
+        """
+        Callback for clicking previous button.
+        """
+
         pass
 
     def on_stop_click(self):
+        """
+        Callback for clicking stop button.
+        """
+
         try:
             self.stream.stop_stream()
         except (RuntimeError, FileNotFoundError):
             return
 
-        with self.maintain_current_view():
+        with self._maintain_current_view():
             # revert texts
             self._refresh_list(search_files=False)
             self.mark_as_stopped(self.currently_playing)
             self.write_info("")
 
     def on_reload_click(self):
+        """
+        Callback for clicking reload button.
+        """
+
         self.on_stop_click()
 
         # clear widgets
@@ -264,7 +286,7 @@ class AudioPlayer:
             self.on_reload_click()
         else:
             # force play audio
-            with self.maintain_current_view():
+            with self._maintain_current_view():
                 try:
                     self.stream.stop_stream()
                 except RuntimeError as err:
@@ -281,7 +303,7 @@ class AudioPlayer:
         Also a callback for Play Button.
         """
 
-        with self.maintain_current_view():
+        with self._maintain_current_view():
             try:
                 # assuming State: Paused
                 self.stream.pause_stream()
@@ -382,7 +404,7 @@ class AudioPlayer:
 
         if text:
             # Will have hard time to implement cycling texts.
-            fit_text = fit_to_actual_width(str(text), self.get_absolute_size(self.info_box)[-1])
+            fit_text = fit_to_actual_width(str(text), self._get_absolute_size(self.info_box)[-1])
             self.info_box.set_text(fit_text)
         else:
             self.info_box.clear()
@@ -398,7 +420,7 @@ class AudioPlayer:
 
         widget.clear()
         offset = -1
-        _, usable_x = self.get_absolute_size(widget)
+        _, usable_x = self._get_absolute_size(widget)
         for line_ in lines:
             widget.add_item(fit_to_actual_width(line_, usable_x + offset))
 
@@ -527,7 +549,7 @@ class AudioPlayer:
 
             logger.debug(f"Playing Next - {next_}")
 
-            with self.maintain_current_view():
+            with self._maintain_current_view():
                 if not self.play_stream(next_):
                     logger.warning("Error playing next track. Moving on.")
                     self.play_next()
@@ -536,7 +558,7 @@ class AudioPlayer:
 
     # Helper functions -----------------------------------------
 
-    def get_absolute_size(self, widget: py_cui.widgets.Widget) -> Tuple[int, int]:
+    def _get_absolute_size(self, widget: py_cui.widgets.Widget) -> Tuple[int, int]:
         """
         Get absolute dimensions of widget including borders.
 
@@ -579,7 +601,7 @@ class AudioPlayer:
         return self.path_wrapper.index(file_name)
 
     @contextmanager
-    def maintain_current_view(self):
+    def _maintain_current_view(self):
         """
         Remembers indices of both `selected / visible top item` and restores it.
         Will not be necessary when directly manipulating ScrollWidget's internal item list.
@@ -606,7 +628,8 @@ def draw_player():
     # this don't have to be a second. Might be an example of downside of ABC
 
     player_ref = AudioPlayer(root)
-    assert player_ref  # Preventing unused variable check
+    assert player_ref
+    # Preventing unused variable check
 
     root.start()
 
