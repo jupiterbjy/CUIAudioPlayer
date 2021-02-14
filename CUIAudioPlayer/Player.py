@@ -1,12 +1,15 @@
 """
 Main CUI(TUI) interface definitions.
 Currently using master branch of py_cui.
+
+Written and ran on Python 3.9. Expects 3.8+
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Mapping, Generator, Iterable, Tuple, Any
+from typing import TYPE_CHECKING, Callable, Mapping, Generator, Iterable, Iterator, Tuple, Any
 from sys import platform
 import array
+import inspect
 import functools
 import itertools
 
@@ -94,25 +97,23 @@ def meta_list_str_gen(dict_: Mapping) -> Generator[str, None, None]:
         yield " "
 
 
-def pad_actual_length(source: str, pad: str = "\u200b") -> Tuple[str, str]:
+def pad_actual_length(source: Iterator[str], pad: str = "\u200b") -> Tuple[str, Generator[str, None, None]]:
     """
     Determine real-displaying character length, and provide padding accordingly to match length.
     This way slicing will cut asian letters properly, not breaking tidy layouts.
+    Don't expect to have 0-width characters in given string!
 
-    :param source: Original string to be manipulated
+    :param source: Original string to be manipulated. Accepts Iterator[str], allowing lazy generator.
     :param pad: Default character to pad, default ZWSP
 
-    :return: padding character and padded string
+    :return: padding character and lazy generator for padded string
     """
 
-    if wcswidth(source) == len(source):
-        return pad, source
-
-    def inner_gen(source_: str) -> Generator[str, None, None]:
+    def inner_gen(source_: Iterator[str]) -> Generator[str, None, None]:
         for char in source_:
             yield char + pad if wcwidth(char) == 2 else char
 
-    return pad, "".join(inner_gen(source.replace(pad, "")))
+    return pad, inner_gen(source)
     # https://github.com/microsoft/terminal/issues/1472
     # Windows Terminal + (Powershell/CMD) combo can't run this due to ZWSP width issue.
     # Expected to run in purely CMD / Linux Terminal. or WSL + Windows Terminal.
@@ -122,6 +123,7 @@ def pad_actual_length(source: str, pad: str = "\u200b") -> Tuple[str, str]:
 def fit_to_actual_width(text: str, length_lim: int) -> str:
     """
     Cuts given text with varying character width to fit inside given width.
+    Expects that lines is short enough, will read entire lines on memory multiple times.
 
     :param text: Source text
     :param length_lim: length limit in 1-width characters
@@ -129,18 +131,63 @@ def fit_to_actual_width(text: str, length_lim: int) -> str:
     :return: cut string
     """
 
-    _, padded = pad_actual_length(text)
-    limited = padded[:length_lim - 3]
+    ellipsis_ = "..."
 
-    if wcwidth(limited[-1]) == 2:
-        # if so, last padding was chopped off, so last 2-width character shouldn't be displayed.
-        limited = limited[:-1]
+    # returns immediately if no action is needed
+    if wcswidth(text) != len(text):
 
-    if len(padded) > length_lim - 3:
-        limited += " .."
+        _, padded = pad_actual_length(text)
+        source = "".join(padded)
+        limited = source[:length_lim]
+
+        # if last character was 2-width, padding unicode wore off, so last 2-width character can't fit.
+        # instead pad with space for consistent ellipsis position.
+        if wcwidth(limited[-1]) == 2:
+            limited = limited[:-1] + " "
+    else:
+        source = text
+        limited = text[:length_lim]
+
+    # Add ellipsis if original text was longer than given width
+    if len(source) > length_lim:
+        limited = limited[:length_lim - len(ellipsis_) - 1]
+        limited += ellipsis_
 
     return limited
 
+
+def fit_to_actual_width_multiline(text: str, length_lim: int) -> Generator[str, None, None]:
+    """
+    Cuts given text with varying character width to fit inside given width.
+    Will yield multiple lines if line length exceed given length_lim.
+
+    :param text: Source text
+    :param length_lim: length limit in 1-width characters
+
+    :return: lazy generator yielding multi-line cut strings
+    """
+
+    _, padded = pad_actual_length(text)
+
+    def generator():
+        next_line = ''
+        line_size = length_lim
+
+        while line := "".join(itertools.islice(padded, 0, line_size)):
+            # Add contents of next_line, then reset line length if next_line is not empty
+            if next_line:
+                line = next_line + line
+                next_line = ''
+
+            # check if last text was 2-width character. If so, move it to next_line and adjust next line_size.
+            if wcwidth(line[-1]) == 2:
+                next_line = line[-1]
+                line = line[:-1]
+                line_size -= 1
+
+            yield line
+
+    return generator()
 
 # ------------------------------------------------------------------
 
@@ -239,8 +286,6 @@ class AudioPlayer:
         """
         Callback for clicking previous button.
         """
-
-        pass
 
     def on_stop_click(self):
         """
@@ -377,14 +422,13 @@ class AudioPlayer:
         self.audio_list.set_title(f"Audio List - "
                                   f"{len(self.path_wrapper.audio_file_list)} track(s)")
 
-    # TODO: fetch metadata area's physical size and put line breaks or text cycling accordingly.
     def _update_meta(self):
         """
         Updates metadata to show selected item.
         """
 
         ordered = extract_metadata(self.selected_track)
-        self.write_meta_list(meta_list_str_gen(ordered))
+        self.write_meta_list(meta_list_str_gen(ordered), wrap_line=True)
 
     def _clear_meta(self):
         """
@@ -410,7 +454,7 @@ class AudioPlayer:
             self.info_box.clear()
             # Sometimes you just want to unify interfaces.
 
-    def _write_to_scroll_widget(self, lines: Iterable, widget: py_cui.widgets.ScrollMenu):
+    def _write_to_scroll_widget(self, lines: Iterable, widget: py_cui.widgets.ScrollMenu, wrap_line=False):
         """
         Internal function that handles writing on scroll widget.
 
@@ -421,17 +465,27 @@ class AudioPlayer:
         widget.clear()
         offset = -1
         _, usable_x = self._get_absolute_size(widget)
-        for line_ in lines:
-            widget.add_item(fit_to_actual_width(line_, usable_x + offset))
 
-    def write_meta_list(self, lines: Iterable):
+        if wrap_line:
+            def wrapper_gen():
+                for source_line in lines:
+                    yield from fit_to_actual_width_multiline(source_line, usable_x + offset)
+
+            for line in wrapper_gen():
+                widget.add_item(line)
+        else:
+            for line_ in lines:
+                widget.add_item(fit_to_actual_width(line_, usable_x + offset))
+
+    def write_meta_list(self, lines: Iterable, wrap_line=False):
         """
         writes to the meta_list.
 
         :param lines: lines to write on audio_list
+        :param wrap_line: If True, instead of shortening line it will write on multiple lines.
         """
 
-        self._write_to_scroll_widget(lines, self.meta_list)
+        self._write_to_scroll_widget(lines, self.meta_list, wrap_line)
 
     def write_audio_list(self, lines: Iterable):
         """

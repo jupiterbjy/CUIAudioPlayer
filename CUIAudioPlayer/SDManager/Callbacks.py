@@ -1,12 +1,16 @@
+"""
+Callback definitions for sounddevice streams.
+"""
+
 from __future__ import annotations
 from typing import TYPE_CHECKING, Callable, Type
+import itertools
+import sounddevice as sd
+from LoggingConfigurator import logger
+
 if TYPE_CHECKING:
     from .StreamManager import StreamManager
     from .StreamStates import StreamState
-
-import sounddevice as sd
-import itertools
-from LoggingConfigurator import logger
 
 
 def stream_callback_closure(stream_manager: StreamManager, raw=False) -> Callable:
@@ -48,7 +52,12 @@ def stream_callback_closure(stream_manager: StreamManager, raw=False) -> Callabl
 
     def stream_cb_raw(data_out, frames: int, time, status: sd.CallbackFlags) -> None:
         nonlocal last_frame
-        assert not status
+
+        try:
+            assert not status
+        except AssertionError:
+            logger.critical(str(status))
+            raise
 
         if (written := audio_ref.buffer_read_into(data_out, dtype)) < frames:
             data_out[written:] = [[0.0] * channel for _ in range(frames - written)]
