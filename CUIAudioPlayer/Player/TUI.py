@@ -8,6 +8,8 @@ class AudioPlayerTUI:
     """
 
     def __init__(self, root: py_cui.PyCUI):
+        super().__init__()
+
         self._root = root
 
         # -- UI definitions

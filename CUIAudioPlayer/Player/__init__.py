@@ -7,19 +7,7 @@ import py_cui
 from wcwidth import wcwidth, wcswidth
 from tinytag import TinyTag
 
-
-def extract_meta(abs_file_dir):
-    """
-    Extracts metadata as OrderedDict.
-
-    :param abs_file_dir: absolute location of audio file
-
-    :return: OrderedDict[str, Any]
-    """
-
-    tag = TinyTag.get(abs_file_dir)
-    filtered = sorted(((k, v) for k, v in tag.as_dict().items() if v))
-    return OrderedDict(filtered)
+from LoggingConfigurator import logger
 
 
 def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable, keypress_only=False):
@@ -46,6 +34,24 @@ def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable, keypr
     setattr(widget_, "_handle_key_press", patch_factory(getattr(widget_, "_handle_key_press")))
     if not keypress_only:
         setattr(widget_, "_handle_mouse_press", patch_factory(getattr(widget_, "_handle_mouse_press")))
+
+
+def progress_bar_mimic(max_width, character_set=(" ",)):
+    pass
+
+
+def extract_meta(abs_file_dir):
+    """
+    Extracts metadata as OrderedDict.
+
+    :param abs_file_dir: absolute location of audio file
+
+    :return: OrderedDict[str, Any]
+    """
+
+    tag = TinyTag.get(abs_file_dir)
+    filtered = sorted(((k, v) for k, v in tag.as_dict().items() if v))
+    return OrderedDict(filtered)
 
 
 def meta_list_str_gen(dict_: Mapping) -> Generator[str, None, None]:
@@ -153,5 +159,6 @@ def fit_to_actual_width_multiline(text: str, length_lim: int) -> Generator[str, 
                 line_size -= 1
 
             yield line
+            logger.debug(f"width_lim: {length_lim} / actual: {len(line)}")
 
     return generator()

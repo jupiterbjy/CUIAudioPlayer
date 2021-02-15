@@ -14,11 +14,10 @@ from SDManager.StreamManager import StreamManager
 from LoggingConfigurator import logger
 
 if TYPE_CHECKING:
-    import pathlib
     from SDManager import AudioObject
 
 
-class AudioPlayer(PlayerStates, AudioPlayerTUI):
+class AudioPlayer(AudioPlayerTUI, PlayerStates):
     def __init__(self, root: py_cui.PyCUI):
         super().__init__(root)
 

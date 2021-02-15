@@ -3,7 +3,7 @@ Implementation of state machine using __class__ attribute manipulation from Pyth
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
 from FileWalker import PathWrapper
 from SDManager.StreamManager import StreamManager
@@ -19,13 +19,14 @@ class PlayerStates:
     symbols = {"play": "⏵", "pause": "⏸", "stop": "⏹"}
 
     def __init__(self, *args):
+        super().__init__()
 
         # -- Generator instance and states
         self._current_play_generator = None
         self._current_name_cycler = None
 
         # -- Path and stream instance
-        self.stream: StreamManager = StreamManager(self.show_progress_wrapper(), self.play_next)
+        self.stream: Union[StreamManager, None] = StreamManager(self.show_progress_wrapper(), self.play_next)
         self.path_wrapper = PathWrapper()
 
     def on_file_click(self):
