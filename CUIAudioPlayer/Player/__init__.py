@@ -159,6 +159,5 @@ def fit_to_actual_width_multiline(text: str, length_lim: int) -> Generator[str, 
                 line_size -= 1
 
             yield line
-            logger.debug(f"width_lim: {length_lim} / actual: {len(line)}")
 
     return generator()

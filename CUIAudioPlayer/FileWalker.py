@@ -1,5 +1,4 @@
 import pathlib
-# import numpy as np
 import soundfile as sf
 from tinytag import TinyTag
 from typing import Generator, Union, List
@@ -15,6 +14,7 @@ else:
     PY_DUB_ENABLED = True
 
 
+# TODO: separate audio related logic from pathwrapper via subclass
 class PathWrapper:
     primary_formats = set("." + key.lower() for key in sf.available_formats().keys())
     secondary_formats = {".m4a", ".mp3"} if PY_DUB_ENABLED else {}
@@ -36,7 +36,10 @@ class PathWrapper:
         return (path_obj for path_obj in self.list_file() if path_obj.suffix in self.supported_formats)
 
     def list_folder(self) -> Generator[pathlib.Path, None, None]:
-        """First element will be current folder location. either use next() or list()[1:] to skip it.."""
+        """
+        First element will be current folder location. either use next() or list()[1:] to skip it.
+        """
+
         def generator():
             yield self.current_path.parent
             for item in self.current_path.glob("*/"):
@@ -46,11 +49,16 @@ class PathWrapper:
         return generator()
 
     def list_file(self) -> Generator[pathlib.Path, None, None]:
-        """Can't use glob as it match folders such as .git"""
+        """
+        Can't use glob as it match folders such as .git, using pathlib.Path object instead.
+        """
+
         return (item for item in self.current_path.glob("*/") if item.is_file())
 
     def step_in(self, directory: Union[str, pathlib.Path]):
-        """Relative / Absolute paths supported."""
+        """
+        Relative / Absolute paths supported.
+        """
 
         self.current_path = self.current_path.joinpath(directory)
         self.refresh_list()

@@ -1,27 +1,36 @@
+"""
+Combined logic with TUI and PlayerLogixMixin.
+"""
+
 from __future__ import annotations
 
 import itertools
-import array
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Iterable, Tuple, Callable, Any
+from typing import TYPE_CHECKING, Iterable, Callable, Any, Type
 
 import py_cui
-from .PlayerStates import PlayerStates
-from .TUI import AudioPlayerTUI
-from . import add_callback_patch, fit_to_actual_width, fit_to_actual_width_multiline, extract_meta, meta_list_str_gen
+from FileWalker import PathWrapper
 from SDManager.StreamStates import StreamPausedState, StreamStoppedState
 from SDManager.StreamManager import StreamManager
 from LoggingConfigurator import logger
+from .TUI import AudioPlayerTUI
+from .PlayerStates import PlayerLogicMixin, PlayerStates, AudioUnloaded
+from . import add_callback_patch, fit_to_actual_width, fit_to_actual_width_multiline, extract_meta, meta_list_str_gen
 
 if TYPE_CHECKING:
+    import pathlib
     from SDManager import AudioObject
 
 
-class AudioPlayer(AudioPlayerTUI, PlayerStates):
+class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
+    """
+    Main player class.
+    """
+
     def __init__(self, root: py_cui.PyCUI):
         super().__init__(root)
 
-        self.play_btn.command = self.play_cb_space_bar
+        self.play_btn.command = self._play_cb_space_bar
         self.stop_btn.command = self._on_stop_click
         self.reload_btn.command = self._on_reload_click
         self.next_btn.command = self._on_next_track_click
@@ -42,8 +51,8 @@ class AudioPlayer(AudioPlayerTUI, PlayerStates):
         self.volume_slider.set_bar_char("█")
 
         # -- Key binds
-        self.audio_list.add_key_command(py_cui.keys.KEY_ENTER, self.play_cb_enter)
-        self.audio_list.add_key_command(py_cui.keys.KEY_SPACE, self.play_cb_space_bar)
+        self.audio_list.add_key_command(py_cui.keys.KEY_ENTER, self._play_cb_enter)
+        self.audio_list.add_key_command(py_cui.keys.KEY_SPACE, self._play_cb_space_bar)
 
         # -- Color rules
         self.audio_list.add_text_color_rule(r"[0-9 ].*" + self.symbols["play"], py_cui.WHITE_ON_YELLOW, "contains")
@@ -52,108 +61,77 @@ class AudioPlayer(AudioPlayerTUI, PlayerStates):
         self.audio_list.add_text_color_rule(r"DIR", py_cui.CYAN_ON_BLACK, "startswith", include_whitespace=False)
         self.info_box.add_text_color_rule("ERR:", py_cui.WHITE_ON_RED, "startswith")
 
+        # -- State
+        self.player_state: Type[PlayerStates] = AudioUnloaded
+        self._digit: int = 0
+
+        # -- Path and stream instance
+        self.stream = StreamManager(self.show_progress_wrapper(), self.play_next)
+        self.path_wrapper = PathWrapper()
+
+        # -- Generator instance and states
+        self._current_play_generator = None
+        self._current_name_cycler = None
+
         self._on_reload_click()
 
     # Primary callbacks
 
     def _on_file_click(self):
         """
-        Callback for clicking an item from audio_list.
+        Callback for clicking item in audio list.
         """
 
-        if self.selected_track in self.path_wrapper.folder_list:
-            self.clear_meta()
-        else:
-            self.update_meta()
+        # logger.debug(f"State: {self.player_state}")
+        return self.player_state.on_file_click(self)
 
     def _on_next_track_click(self):
         """
         Callback for clicking next track button.
         """
 
-        self.stream.stop_stream(run_finished_callback=False)
+        logger.debug(f"State: {self.player_state}")
+        return self.player_state.on_next_track_click(self)
 
     def _on_previous_track_click(self):
         """
         Callback for clicking previous button.
         """
 
+        logger.debug(f"State: {self.player_state}")
+        return self.player_state.on_previous_track_click(self)
+
     def _on_stop_click(self):
         """
         Callback for clicking stop button.
         """
 
-        try:
-            self.stream.stop_stream()
-        except (RuntimeError, FileNotFoundError):
-            return
-
-        with self._maintain_current_view():
-            # revert texts
-            self._refresh_list(search_files=False)
-            self.mark_as_stopped(self.currently_playing)
-            self.write_info("")
+        logger.debug(f"State: {self.player_state}")
+        return self.player_state.on_stop_click(self)
 
     def _on_reload_click(self):
         """
         Callback for clicking reload button.
         """
 
-        self._on_stop_click()
+        logger.debug(f"State: {self.player_state}")
+        return self.player_state.on_reload_click(self)
 
-        # clear widgets
-
-        for widget in self.clear_target:
-            widget.clear()
-
-        self.stream = StreamManager(self.show_progress_wrapper(), self.play_next)
-        self._refresh_list(search_files=True)
-
-    # Media control callback definitions -----------------------
-    # TODO: Refactor to state machine
-
-    def play_cb_enter(self):
+    def _play_cb_enter(self):
         """
-        Enters directory if selected item is one of them. Else will stop current track and play selected track.
+        Callback for pressing enter on audio list.
         """
 
-        if self.selected_track in self.path_wrapper.folder_list:
-            self.path_wrapper.step_in(self.selected_track)
-            self._on_reload_click()
-        else:
-            # force play audio
-            with self._maintain_current_view():
-                try:
-                    self.stream.stop_stream()
-                except RuntimeError as err:
-                    logger.warning(str(err))
-                except FileNotFoundError:
-                    pass
+        logger.debug(f"State: {self.player_state}")
+        return self.player_state.on_audio_list_enter_press(self)
 
-                if self.play_stream():
-                    self.mark_as_playing(self.currently_playing)
-
-    def play_cb_space_bar(self):
+    def _play_cb_space_bar(self):
         """
-        Determine actions depending on selected item when space bar is pressed on audio list.
-        Also a callback for Play Button.
+        Callback for pressing space bar on audio list.
         """
 
-        with self._maintain_current_view():
-            try:
-                # assuming State: Paused
-                self.stream.pause_stream()
-                self.mark_as_paused(self.currently_playing)
-
-            except RuntimeError:
-                # State: stopped
-                self.stream.start_stream()
-                self.mark_as_playing(self.currently_playing)
-
-            except FileNotFoundError:
-                # State: Unloaded
-                if self.play_stream():
-                    self.mark_as_playing(self.currently_playing)
+        logger.debug(f"State: {self.player_state}")
+        return self.player_state.on_audio_list_space_press(self)
 
     def play_stream(self, audio_idx=None) -> int:
         """
@@ -183,6 +161,8 @@ class AudioPlayer(AudioPlayerTUI, PlayerStates):
 
         return True
 
+    # End of primary callback
+
     def _refresh_list(self, search_files=True):
         """
         Refresh directory contents. If search_files is True, will also update cached files list.
@@ -197,6 +177,7 @@ class AudioPlayer(AudioPlayerTUI, PlayerStates):
             self.path_wrapper.refresh_list()
 
         digits = len(str(len(self.path_wrapper.audio_file_list))) + 2
+        self._digit = digits
 
         def folder_gen():
             format_ = f"{('DIR'.ljust(digits))[:digits]}| "
@@ -213,15 +194,15 @@ class AudioPlayer(AudioPlayerTUI, PlayerStates):
         self.audio_list.set_title(f"Audio List - "
                                   f"{len(self.path_wrapper.audio_file_list)} track(s)")
 
-    def update_meta(self):
+    def _update_meta(self):
         """
         Updates metadata to show selected item.
         """
 
-        ordered = extract_meta(self.selected_track)
+        ordered = extract_meta(self.selected_idx_path)
         self.write_meta_list(meta_list_str_gen(ordered), wrap_line=True)
 
-    def clear_meta(self):
+    def _clear_meta(self):
         """
         Clears meta list. Unified interface purpose.
         """
@@ -239,7 +220,7 @@ class AudioPlayer(AudioPlayerTUI, PlayerStates):
 
         if text:
             # Will have hard time to implement cycling texts.
-            fit_text = fit_to_actual_width(str(text), self._get_absolute_size(self.info_box)[-1])
+            fit_text = fit_to_actual_width(str(text), self.get_absolute_size(self.info_box)[-1])
             self.info_box.set_text(fit_text)
         else:
             self.info_box.clear()
@@ -255,7 +236,7 @@ class AudioPlayer(AudioPlayerTUI, PlayerStates):
 
         widget.clear()
         offset = -1
-        _, usable_x = self._get_absolute_size(widget)
+        _, usable_x = self.get_absolute_size(widget)
 
         if wrap_line:
             def wrapper_gen():
@@ -287,18 +268,28 @@ class AudioPlayer(AudioPlayerTUI, PlayerStates):
 
         self._write_to_scroll_widget(lines, self.audio_list)
 
-    def _mark_target(self, track_idx, search_target: str, replace_target: str):
+    def _mark_target(self, track_idx, replace_target: str):
         """
         internal function that changes search_target in line at index to replace_target.
 
         :param track_idx: index of item to mark
-        :param search_target: string to search
         :param replace_target: string to replace with
         """
 
         source = self.audio_list.get_item_list()
-        source[track_idx] = source[track_idx].replace(search_target, replace_target)
+        string = source[track_idx]
+
+        source[track_idx] = string[:self._digit] + replace_target + string[self._digit + 1:]
         self.write_audio_list(source)
+
+    def reset_marking(self, track_idx):
+        """
+        Set line at given index to default state
+
+        :param track_idx: index of item to mark
+        """
+
+        self._mark_target(track_idx, "|")
 
     def mark_as_playing(self, track_idx):
         """
@@ -307,11 +298,7 @@ class AudioPlayer(AudioPlayerTUI, PlayerStates):
         :param track_idx: index of item to mark
         """
 
-        # Mark the track on the audio list, and initialize name cycling generator
-        if self.stream.stream_state == StreamStoppedState:
-            self._mark_target(track_idx, self.symbols["stop"], self.symbols["play"])
-        else:
-            self._mark_target(track_idx, "|", self.symbols["play"])
+        self._mark_target(track_idx, self.symbols["play"])
 
     def mark_as_paused(self, track_idx):
         """
@@ -320,11 +307,7 @@ class AudioPlayer(AudioPlayerTUI, PlayerStates):
         :param track_idx: index of item to mark
         """
 
-        if self.stream.stream_state == StreamPausedState:
-            self._mark_target(track_idx, self.symbols["play"], self.symbols["pause"])
-        else:
-            self._mark_target(track_idx, self.symbols["pause"], self.symbols["play"])
-            # This fits more to mark_as_playing, but consequences does not allow to do so, for now.
+        self._mark_target(track_idx, self.symbols["pause"])
 
     def mark_as_stopped(self, track_idx):
         """
@@ -333,10 +316,7 @@ class AudioPlayer(AudioPlayerTUI, PlayerStates):
         :param track_idx: index of item to mark
         """
 
-        if self.stream.stream_state == StreamPausedState:
-            self._mark_target(track_idx, self.symbols["pause"], self.symbols["stop"])
-        else:
-            self._mark_target(track_idx, self.symbols["play"], self.symbols["stop"])
+        self._mark_target(track_idx, self.symbols["stop"])
 
     def show_progress_wrapper(self) -> Callable[[AudioObject.AudioInfo, Any], None]:
         """
@@ -363,21 +343,6 @@ class AudioPlayer(AudioPlayerTUI, PlayerStates):
 
     # Playlist control callback --------------------------------
 
-    def _init_playlist(self):
-        """
-        Create itertools.cycle generator that acts as a playlist
-        """
-
-        # Shuffling is harder than imagined!
-        # https://engineering.atspotify.com/2014/02/28/how-to-shuffle-songs/
-
-        cycle_gen = itertools.cycle(array.array('i', (n for n in range(len(self.path_wrapper.audio_file_list)))))
-        for _ in range(self.currently_playing + 1):
-            next(cycle_gen)
-
-        self._current_play_generator = cycle_gen
-        logger.debug("Initialized playlist generator.")
-
     def play_next(self):
         """
         Play next track. Called by finished callback of sounddevice when conditions are met.
@@ -386,15 +351,11 @@ class AudioPlayer(AudioPlayerTUI, PlayerStates):
         logger.debug(f"Condition: {self.stream.stop_flag}")
 
         if not self.stream.stop_flag:
-            try:
-                next_ = next(self._current_play_generator)
-            except TypeError:
-                self._init_playlist()
-                next_ = next(self._current_play_generator)
+            next_ = self.playlist_next()
 
             logger.debug(f"Playing Next - {next_}")
 
-            with self._maintain_current_view():
+            with self.maintain_current_view():
                 if not self.play_stream(next_):
                     logger.warning("Error playing next track. Moving on.")
                     self.play_next()
@@ -402,17 +363,6 @@ class AudioPlayer(AudioPlayerTUI, PlayerStates):
                     self.mark_as_playing(self.currently_playing)
 
     # Helper functions -----------------------------------------
-
-    def _get_absolute_size(self, widget: py_cui.widgets.Widget) -> Tuple[int, int]:
-        """
-        Get absolute dimensions of widget including borders.
-
-        :param widget: widget instance to get dimensions of
-        :return: y-height and x-height
-        """
-
-        abs_y, abs_x = widget.get_absolute_dimensions()
-        return abs_y - self.usable_offset_y, abs_x - self.usable_offset_x
 
     @property
     def selected_idx(self) -> int:
@@ -424,8 +374,18 @@ class AudioPlayer(AudioPlayerTUI, PlayerStates):
 
         return self.audio_list.get_selected_item_index()
 
+    @property
+    def selected_idx_path(self) -> pathlib.Path:
+        """
+        Returns pathlib.Path object of selected track. Convenient method.
+
+        :return: pathlib.Path object indicating directory of selected item
+        """
+
+        return self.path_wrapper[self.selected_idx]
+        
     @contextmanager
-    def _maintain_current_view(self):
+    def maintain_current_view(self):
         """
         Remembers indices of both `selected / visible top item` and restores it.
         Will not be necessary when directly manipulating ScrollWidget's internal item list.
@@ -438,4 +398,3 @@ class AudioPlayer(AudioPlayerTUI, PlayerStates):
         finally:
             self.audio_list.set_selected_item_index(current_idx)
             self.audio_list._top_view = visible_idx
-
