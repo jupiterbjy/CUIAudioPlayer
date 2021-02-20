@@ -7,7 +7,7 @@ from __future__ import annotations
 import array
 import itertools
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Iterable, Callable, Any, Type, Tuple
+from typing import TYPE_CHECKING, Iterable, Callable, Type, Tuple
 
 import py_cui
 from FileWalker import PathWrapper
@@ -121,13 +121,16 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
 
         # -- Key binds
         self.audio_list.add_key_command(py_cui.keys.KEY_ENTER, self._play_cb_enter)
+        self.volume_slider.add_key_command(py_cui.keys.KEY_SPACE, self._play_cb_space_bar)
+
         for widget in (
             self.audio_list,
             self.info_box,
-            self.volume_slider,
             self.meta_list,
         ):
             widget.add_key_command(py_cui.keys.KEY_SPACE, self._play_cb_space_bar)
+            widget.add_key_command(py_cui.keys.KEY_LEFT_ARROW, self._adjust_playback_left)
+            widget.add_key_command(py_cui.keys.KEY_RIGHT_ARROW, self._adjust_playback_right)
 
         # -- Color rules
         self.info_box.add_text_color_rule("ERR:", py_cui.WHITE_ON_RED, "startswith")
@@ -210,6 +213,22 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
 
         logger.debug(f"State: {self.player_state}")
         return self.player_state.on_audio_list_space_press(self)
+
+    def _adjust_playback_left(self):
+        """
+        Moves audio playback cursor to left
+        """
+
+        logger.debug(f"State: {self.player_state}")
+        return self.player_state.adjust_playback_left(self)
+
+    def _adjust_playback_right(self):
+        """
+        Move audio playback cursor to right
+        """
+
+        logger.debug(f"State: {self.player_state}")
+        return self.player_state.adjust_playback_right(self)
 
     def volume_callback(self):
         """
@@ -407,18 +426,21 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
 
         self._mark_target(track_idx, self.symbols["stop"])
 
-    def show_progress_wrapper(self) -> Callable[[AudioObject.AudioInfo, Any], None]:
+    def show_progress_wrapper(self, paused=False) -> Callable[[AudioObject.AudioInfo, int], None]:
         """
         Wrapper for function that handles progress. Returning callable is meant to run in sounddevice callback.
 
-        :return:
+        :param paused: if True, change message to display paused state.
+
+        :return: Callback for sounddevice Numpy sound stream
         """
+
+        message = "Paused" if paused else "Playing now"
 
         def digit(int_):
             return len(str(int_))
 
         def show_progress(audio_info: AudioObject.AudioInfo, current_frame):
-            # counting in some marginal errors of mismatching frames and total frames count.
 
             file_name = audio_info.title
             max_frame = audio_info.total_frame
@@ -436,7 +458,7 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
                 f"{gen_progress_bar(current_frame / max_frame, x_width - len(time_string) - 2)}"
             )
 
-            self.write_info(f"Playing now - {file_name}")
+            self.write_info(f"{message} - {file_name}")
 
         return show_progress
 

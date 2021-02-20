@@ -32,19 +32,23 @@ You might want to change codepage when running on CMD. That way you can use utf-
 Clone this and run ```py CUIAudioPlayer```, *python*, *python3.9* or whatever python alias you are using.
 May have to install the dependency manually.
 
+- Audio List / Meta / Info (Widget) Common control:
+    - *Space bar* : Pause / Resume track
+    - *Left Arrow* : Move playback backward 5%
+    - *Right Arrow* : Move playback forward 5%
+
 - Audio List (Widget)
     - File explorer functionality: Select *DIR* marked items and press *Enter* to step in.
     - Play audio file: Select Audio track and press *Enter* to play it. Stops the previous track if there was any.
-    - Pause audio file: Press *Space* to pause/resume track. Don't spam it or will overlap.
 
 - Meta (Widget)
-    - Scrolling up, down with arrow keys. Automatically display selected track's metadata.
+    - Scrolling up, down with *Arrow Up* and *Arrow Down*. Automatically display selected track's metadata.
 
 - Info (Widget)
-    - No interaction available.
+    - No interaction, currently users can edit the content, I have no control over it yet.
 
 - Volume (Widget)
-    - Select, press *Left* or *Right* to adjust volume. This just change vector multiply factor, might distort audio.
+    - Select, press *Left* or *Right* to adjust volume. This just change multiply factor, might distort audio.
 
 - Buttons
     - Play
@@ -78,7 +82,7 @@ This tiny project has goal of learning followings:
    - Fluent Python
 
 Originally meant to create a testing bed for learning *sounddevice* module for use in project
- future projects inside [ProjectIncubator](github.com/jupiterbjy/ProjectIncubator), turns out that this module is
+ future projects inside [ProjectIncubator](https://github.com/jupiterbjy/ProjectIncubator), turns out that this module is
 awesome. I'm having tons of fun with it.
 
 Therefore, from *ProjectIncubator* I separated this using ```subtree split``` - totally a neat feature.
@@ -106,11 +110,11 @@ Will mark those if it's implemented.
     - [x] highlight current
     - [x] wrong file handling
     - [x] library navigation
-    - [x] show progress - Temporarily using seconds.
+    - [x] show progress
     - [x] Continues play - works mostly.
     - [ ] Shuffle
     - [x] Volume control (SW)
-    - [ ] Jump to section
+    - [x] Jump to section
     - [ ] Previous / Next track
     - [ ] mp3 / m4a support - might require pydub and conversion.
 - [ ] Album art visualizing on some sort of ascii art.

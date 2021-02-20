@@ -59,6 +59,12 @@ class PlayerStates:
 
         audio_player.player_state = AudioStopped
 
+        reference = audio_player.stream.audio_info
+
+        # Trigger playback callback to display paused state
+        callback = audio_player.show_progress_wrapper(paused=True)
+        callback(reference, reference.loaded_data.tell())
+
     @staticmethod
     def on_reload_click(audio_player: AudioPlayer):
         """
@@ -107,6 +113,18 @@ class PlayerStates:
         Action to do when *space* is pressed in *audio_list*.
         """
 
+    @staticmethod
+    def adjust_playback_left(audio_player: AudioPlayer):
+        """
+        Moves audio playback cursor to the left.
+        """
+
+    @staticmethod
+    def adjust_playback_right(audio_player: AudioPlayer):
+        """
+        Moves audio playback cursor to the right.
+        """
+
 
 class AudioUnloaded(PlayerStates):
     """
@@ -143,6 +161,22 @@ class AudioStopped(PlayerStates):
 
         audio_player.player_state = AudioRunning
 
+    @staticmethod
+    def adjust_playback_left(audio_player: AudioPlayer):
+        """
+        Moves audio playback cursor to the left. Moves by 5% of total playback
+        """
+
+        AudioPaused.adjust_playback_left(audio_player)
+
+    @staticmethod
+    def adjust_playback_right(audio_player: AudioPlayer):
+        """
+        Moves audio playback cursor to the left. Moves by 5% of total playback
+        """
+
+        AudioPaused.adjust_playback_right(audio_player)
+
 
 class AudioRunning(PlayerStates):
     """
@@ -170,6 +204,38 @@ class AudioRunning(PlayerStates):
 
         audio_player.player_state = AudioPaused
 
+        reference = audio_player.stream.audio_info
+
+        # Trigger playback callback to display paused state
+        callback = audio_player.show_progress_wrapper(paused=True)
+        callback(reference, reference.loaded_data.tell())
+
+    @staticmethod
+    def adjust_playback_left(audio_player: AudioPlayer):
+        """
+        Moves audio playback cursor to the left. Moves by 5% of total playback.
+        Will stop briefly as changing mid-streaming don't work.
+        """
+
+        AudioRunning.on_audio_list_space_press(audio_player)
+
+        AudioPaused.adjust_playback_left(audio_player)
+
+        AudioPaused.on_audio_list_space_press(audio_player)
+
+    @staticmethod
+    def adjust_playback_right(audio_player: AudioPlayer):
+        """
+        Moves audio playback cursor to the right. Moves by 5% of total playback.
+        Will stop briefly as changing mid-streaming don't work.
+        """
+
+        AudioRunning.on_audio_list_space_press(audio_player)
+
+        AudioPaused.adjust_playback_right(audio_player)
+
+        AudioPaused.on_audio_list_space_press(audio_player)
+
 
 class AudioPaused(PlayerStates):
     """
@@ -187,3 +253,46 @@ class AudioPaused(PlayerStates):
             audio_player.mark_as_playing(audio_player.currently_playing)
 
         audio_player.player_state = AudioRunning
+
+    @staticmethod
+    def adjust_playback_left(audio_player: AudioPlayer):
+        """
+        Moves audio playback cursor to the left. Moves by 5% of total playback
+        """
+
+        reference = audio_player.stream.audio_info.loaded_data
+
+        current_frame = reference.tell()
+        total_frame = reference.frames
+        offset = total_frame // 20
+
+        reference.seek(0 if offset > current_frame else (current_frame - offset))
+
+        logger.debug(f"Adjusted left from {current_frame} to {reference.tell()}")
+
+        # Trigger playback callback to display new values
+        callback = audio_player.show_progress_wrapper(paused=True)
+        callback(audio_player.stream.audio_info, reference.tell())
+
+    @staticmethod
+    def adjust_playback_right(audio_player: AudioPlayer):
+        """
+        Moves audio playback cursor to the left. Moves by 5% of total playback
+        """
+
+        reference = audio_player.stream.audio_info.loaded_data
+
+        current_frame = reference.tell()
+        total_frame = reference.frames
+        offset = total_frame // 20
+
+        if (offset + current_frame) > total_frame:
+            reference.seek(total_frame)
+        else:
+            reference.seek(current_frame + offset)
+
+        logger.debug(f"Adjusted right from {current_frame} to {reference.tell()}")
+
+        # Trigger playback callback to display new values
+        callback = audio_player.show_progress_wrapper(paused=True)
+        callback(audio_player.stream.audio_info, reference.tell())
