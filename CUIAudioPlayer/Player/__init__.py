@@ -83,7 +83,9 @@ def pad_actual_length(source: Iterator[str], pad: str = "\u200b") -> Tuple[str, 
 
     def inner_gen(source_: Iterator[str]) -> Generator[str, None, None]:
         for char in source_:
-            yield char + pad if wcwidth(char) == 2 else char
+            yield char
+            if wcwidth(char) == 2:
+                yield pad
 
     return pad, inner_gen(source)
     # https://github.com/microsoft/terminal/issues/1472
@@ -122,7 +124,12 @@ def fit_to_actual_width(text: str, length_lim: int) -> str:
 
     # Add ellipsis if original text was longer than given width
     if len(source) > length_lim:
-        limited = limited[:length_lim - len(ellipsis_) - 1]
+        limited = limited[:length_lim - len(ellipsis_)]
+
+        # check if last character was 2-width, if so, strip last char and add space
+        if wcwidth(limited[-1]):
+            limited = limited[:-1] + ' '
+
         limited += ellipsis_
 
     return limited
@@ -151,6 +158,7 @@ def fit_to_actual_width_multiline(text: str, length_lim: int) -> Generator[str, 
             if next_line:
                 line = next_line + line
                 next_line = ''
+                line_size = length_lim
 
             # check if last text was 2-width character. If so, move it to next_line and adjust next line_size.
             if wcwidth(line[-1]) == 2:

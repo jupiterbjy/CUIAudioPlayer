@@ -27,9 +27,6 @@ class PlayerLogicMixin:
     Mixin dealing with Logics.
     """
 
-    # 3 dots 2 long
-    ellipsis_ = ".."
-
     # Excl. Border, Spacing of widget from abs size.
     usable_offset_y, usable_offset_x = 2, 6
 
