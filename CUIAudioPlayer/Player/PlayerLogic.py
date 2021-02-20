@@ -103,7 +103,6 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
         self.clear_target = (self.audio_list, self.meta_list, self.info_box)
 
         # -- UI setup
-
         add_callback_patch(self.audio_list, self._on_file_click)
         add_callback_patch(self.volume_slider, self.volume_callback, keypress_only=True)
 
@@ -115,7 +114,8 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
 
         # -- Key binds
         self.audio_list.add_key_command(py_cui.keys.KEY_ENTER, self._play_cb_enter)
-        self.audio_list.add_key_command(py_cui.keys.KEY_SPACE, self._play_cb_space_bar)
+        for widget in (self.audio_list, self.info_box, self.volume_slider, self.meta_list):
+            widget.add_key_command(py_cui.keys.KEY_SPACE, self._play_cb_space_bar)
 
         # -- Color rules
         self.audio_list.add_text_color_rule(r"[0-9 ].*" + self.symbols["play"], py_cui.WHITE_ON_YELLOW, "contains")

@@ -6,7 +6,7 @@ Still under heavy development, expect tons of bugs.
 
 - Python 3.8 ~ 3.9
 - Requires ```master``` branch of [py_cui](https://github.com/jwlodek/py_cui)
-- Requires CMD on Windows, custom CMD font may be necessary
+- Requires CMD on Windows, changing font may be necessary.
 
 *0.0.3a - dev*  
 ![](Demo/Images/Demo.webp)
@@ -23,14 +23,14 @@ configuration.
 
 Although this project strictly follow PEP8 at my best, readability might not meet the standard.
 
+You might want to change codepage when running on CMD. That way you can use utf-8 supported fonts.
 
 ---
 
 ## Usage
 
-You might want to change codepage when running on CMD. That way you can use utf-8 supported fonts.
-
-To do this, just type ```chcp 65001``` on CMD, then right click, properties and change font.
+Clone this and run ```py CUIAudioPlayer```, *python*, *python3.9* or whatever python alias you are using.
+May have to install the dependency manually.
 
 - Audio List (Widget)
     - File explorer functionality: Select *DIR* marked items and press *Enter* to step in.
@@ -137,11 +137,9 @@ Will mark those if it's implemented.
   [Example](Demo/Images/trouble_1.png) footage of curses module at finest.  
   Actually I should pad string in reverse order, but just for an example.
  
-  I eventually failed to satisfy *sounddevice*'s dependency - *PortAudio* - on *WSL2*, and since my linux server is
-  headless & tongueless, I can't test there either. This is primary reason why I am using bare CMD mostly. 
-
   Tested out all the terminals I can find for Win10, but none of them have consistent output like real linux terminal. 
-  The only working combination is *WSL2* + *Windows Terminal* or pure *CMD*. *CMD* + *Windows Terminal*
-  can't handle ZWSP either. Since I can't use *sounddevice* on linux yet - until I implement server-client,
-  configuration I am stuck with CMD. I might be better check if I can fix this on
-  *py_cui* side, might become somewhat dirty if I ever managed to do so.
+  The only working combination is *WSL2* + *Windows Terminal* or pure *CMD*.
+  
+  *CMD* + *Windows Terminal*
+  can't handle ZWSP either. Since I can't use *sounddevice* on *WSL* yet - until I implement server-client,
+  configuration I am stuck with CMD.
