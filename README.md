@@ -2,19 +2,27 @@
 
 ---
 
-## Intro
+Still under heavy development, expect tons of bugs.
 
-### *Still under heavy development! I'm testing this as much I can, but there will be ton of bugs!*
-
-Just a tiny project to create a script that literally does its name. Uses Master branch of py_cui currently.
-
-Only working configurations are Linux Terminal / CMD / Windows Terminal + WSL.
-Will show as broken on other configurations on Win10.
-
-Although this project strictly follow PEP8 at my best, readability might not.
+- Python 3.8 ~ 3.9
+- Requires ```master``` branch of [py_cui](https://github.com/jwlodek/py_cui)
+- Requires CMD on Windows, custom CMD font may be necessary
 
 *0.0.3a - dev*  
 ![](Demo/Images/Demo.webp)
+
+---
+
+## Intro
+
+Meant to provide a way to play Audio file in headless configuration via SSH shell.
+
+Ultimate goal is to stream soundtrack, but that's far, far way to go.
+Currently, only application would be playing soundtrack from the speaker attached to headless server - which is rare
+configuration.  
+
+Although this project strictly follow PEP8 at my best, readability might not meet the standard.
+
 
 ---
 
@@ -137,12 +145,3 @@ Will mark those if it's implemented.
   can't handle ZWSP either. Since I can't use *sounddevice* on linux yet - until I implement server-client,
   configuration I am stuck with CMD. I might be better check if I can fix this on
   *py_cui* side, might become somewhat dirty if I ever managed to do so.
-
-### Understanding how callback works in sounddevice.OutputStream
-  To see how dumb I am - check [this](https://github.com/spatialaudiKo/python-sounddevice/issues/306) out.
-  Huge thanks to dev!
-
-### py_cui.SliderWidget not matching the theme of other widgets
-  After closer look at the widget's code, I found it was better to make a 
-  [PR](https://github.com/jwlodek/py_cui/pull/87) out of it, rewriting drawing logic.
-  

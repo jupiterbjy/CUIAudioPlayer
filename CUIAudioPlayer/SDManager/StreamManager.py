@@ -22,8 +22,6 @@ class StreamManager:
         self.stream: sd.OutputStream = None
 
         self.multiplier = 1
-        self.volume_range = 0, 2
-        self.step = 0.25
         self.stream_state = AudioUnloadedState
         self.stop_flag = False
 
@@ -45,14 +43,6 @@ class StreamManager:
     def pause_stream(self):
         self.stop_flag = not self.stop_flag
         return self.stream_state.pause_stream(self)
-
-    def volume_up(self):
-        if (n := self.multiplier + self.step) <= self.volume_range[1]:
-            self.multiplier = n
-
-    def volume_down(self):
-        if (n := self.multiplier - self.step) >= self.volume_range[0]:
-            self.multiplier = n
 
     def __del__(self):
         try:

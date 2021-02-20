@@ -1,10 +1,11 @@
 import py_cui
 import functools
-from math import sin
+from math import sin, pi
+from collections import deque
 from typing import Callable, Sequence, Iterator
 
 
-def monkey_patch_callback(widget_: py_cui.widgets.Widget, callback: Callable):
+def monkey_patch_loop(widget_: py_cui.widgets.Widget, callback: Callable):
     # Sequence is _draw -> _handle_mouse_press, so patching on _draw results 1 update behind.
     # Therefore we need to patch both _handle_mouse_press and _handle_keyboard_press.
 
@@ -16,8 +17,7 @@ def monkey_patch_callback(widget_: py_cui.widgets.Widget, callback: Callable):
 
         return wrapper
 
-    for func_name in ("_handle_key_press", "_handle_mouse_press"):
-        setattr(widget_, func_name, patch_factory(getattr(widget_, func_name)))
+    setattr(widget_, "_draw", patch_factory(getattr(widget_, "_draw")))
 
 
 def visualize(data: Sequence) -> Iterator[str]:
@@ -46,28 +46,29 @@ class Main:
         self.root = root_
 
         # UI Def
-        self.scroll = self.root.add_scroll_menu("Data", 0, 0)
-        self.graph = self.root.add_text_block("Graph", 0, 1)
+        self.slider_f1 = self.root.add_slider("Frequency", 2, 0, min_val=0, max_val=10, init_val=5)
+        self.graph = self.root.add_text_block("Graph", 0, 0, 2, 2)
+        self.slider_y = self.root.add_slider("Height", 2, 1, min_val=0, max_val=20, init_val=10)
 
         # setup
-        monkey_patch_callback(self.scroll, self.callback_scroll)
-        for n in range(40):
-            self.scroll.add_item(int(round(sin(n / 4), 2) * 10) + 10)
+        self.data = deque((sin(n * pi / 10) for n in range(40)))
 
-    def callback_scroll(self):
-        self.graph.clear()
+        # monkey patch draw
+        monkey_patch_loop(self.graph, self.continuous_call)
 
-        text = "\n".join(visualize(self.scroll.get_item_list()))
+    def continuous_call(self):
 
-        data_length = len(self.scroll.get_item_list())
-        selected = self.scroll.get_selected_item_index()
-        indicator = " " * selected + "↑" + " " * (data_length - selected - 1)
+        data = [int(self.slider_y.get_slider_value() * n) for n in self.data]
+        min_ = min(data)
 
-        self.graph.set_text(text + "\n" + indicator)
+        text = "\n".join(visualize([n - min_ for n in data]))
+        self.graph.set_text(text + "\n test")
+        self.data.rotate(-1)
 
 
 if __name__ == '__main__':
-    root = py_cui.PyCUI(1, 2)
+    root = py_cui.PyCUI(3, 2)
     ref = Main(root)
-    root.toggle_unicode_borders()
+    root.set_widget_border_characters("╔", "╗", "╚", "╝", "═", "║")
+    root.set_refresh_timeout(0.2)
     root.start()

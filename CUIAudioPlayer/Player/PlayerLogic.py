@@ -4,22 +4,86 @@ Combined logic with TUI and PlayerLogixMixin.
 
 from __future__ import annotations
 
+import array
 import itertools
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Iterable, Callable, Any, Type
+from typing import TYPE_CHECKING, Iterable, Callable, Any, Type, Tuple
 
 import py_cui
 from FileWalker import PathWrapper
-from SDManager.StreamStates import StreamPausedState, StreamStoppedState
 from SDManager.StreamManager import StreamManager
 from LoggingConfigurator import logger
 from .TUI import AudioPlayerTUI
-from .PlayerStates import PlayerLogicMixin, PlayerStates, AudioUnloaded
+from .PlayerStates import PlayerStates, AudioUnloaded
 from . import add_callback_patch, fit_to_actual_width, fit_to_actual_width_multiline, extract_meta, meta_list_str_gen
 
 if TYPE_CHECKING:
     import pathlib
     from SDManager import AudioObject
+
+
+class PlayerLogicMixin:
+    """
+    Mixin dealing with Logics.
+    """
+
+    # 3 dots 2 long
+    ellipsis_ = ".."
+
+    # Excl. Border, Spacing of widget from abs size.
+    usable_offset_y, usable_offset_x = 2, 6
+
+    # Symbols for play state indicator
+    symbols = {"play": "⏵", "pause": "⏸", "stop": "⏹"}
+
+    def _init_playlist(self: AudioPlayer):
+        """
+        Create itertools.cycle generator that acts as a playlist
+        """
+
+        # Shuffling is harder than imagined!
+        # https://engineering.atspotify.com/2014/02/28/how-to-shuffle-songs/
+
+        cycle_gen = itertools.cycle(array.array('i', (n for n in range(len(self.path_wrapper.audio_file_list)))))
+        for _ in range(self.currently_playing + 1):
+            next(cycle_gen)
+
+        self._current_play_generator = cycle_gen
+        logger.debug("Initialized playlist generator.")
+
+    def playlist_next(self: AudioPlayer):
+        """
+        Separated logic from TUI
+        :return:
+        """
+
+        try:
+            return next(self._current_play_generator)
+        except TypeError:
+            self._init_playlist()
+            return next(self._current_play_generator)
+
+    def get_absolute_size(self: AudioPlayer, widget: py_cui.widgets.Widget) -> Tuple[int, int]:
+        """
+        Get absolute dimensions of widget including borders.
+
+        :param widget: widget instance to get dimensions of
+        :return: y-height and x-height
+        """
+
+        abs_y, abs_x = widget.get_absolute_dimensions()
+        return abs_y - self.usable_offset_y, abs_x - self.usable_offset_x
+
+    @property
+    def currently_playing(self: AudioPlayer) -> int:
+        """
+        Returns index of currently played track. Currently using slow method for simplicity.
+
+        :return: index of played file
+        """
+
+        file_name = self.stream.audio_info.loaded_data.name
+        return self.path_wrapper.index(file_name)
 
 
 class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
@@ -34,20 +98,19 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
         self.stop_btn.command = self._on_stop_click
         self.reload_btn.command = self._on_reload_click
         self.next_btn.command = self._on_next_track_click
-        self.prev_btn.command = lambda a=None: None
+        # self.prev_btn.command = lambda a=None: None
 
         self.clear_target = (self.audio_list, self.meta_list, self.info_box)
 
         # -- UI setup
-        def volume_callback():
-            self.stream.multiplier = self.stream.step * self.volume_slider.get_slider_value()
 
         add_callback_patch(self.audio_list, self._on_file_click)
-        add_callback_patch(self.volume_slider, volume_callback, keypress_only=True)
+        add_callback_patch(self.volume_slider, self.volume_callback, keypress_only=True)
 
         self.volume_slider.toggle_border()
         self.volume_slider.toggle_title()
         self.volume_slider.toggle_value()
+        self.volume_slider.align_to_bottom()
         self.volume_slider.set_bar_char("█")
 
         # -- Key binds
@@ -132,6 +195,13 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
 
         logger.debug(f"State: {self.player_state}")
         return self.player_state.on_audio_list_space_press(self)
+
+    def volume_callback(self):
+        """
+        Callback for volume slider that adjust multiplier inside StreamManager.
+        """
+
+        self.stream.multiplier = self.volume_slider.get_slider_value() / 4
 
     def play_stream(self, audio_idx=None) -> int:
         """
