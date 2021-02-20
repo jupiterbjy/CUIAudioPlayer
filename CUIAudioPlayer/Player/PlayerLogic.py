@@ -15,7 +15,14 @@ from SDManager.StreamManager import StreamManager
 from LoggingConfigurator import logger
 from .TUI import AudioPlayerTUI
 from .PlayerStates import PlayerStates, AudioUnloaded
-from . import add_callback_patch, fit_to_actual_width, fit_to_actual_width_multiline, extract_meta, meta_list_str_gen
+from . import (
+    add_callback_patch,
+    fit_to_actual_width,
+    fit_to_actual_width_multiline,
+    extract_meta,
+    meta_list_str_gen,
+    gen_progress_bar,
+)
 
 if TYPE_CHECKING:
     import pathlib
@@ -41,7 +48,10 @@ class PlayerLogicMixin:
         # Shuffling is harder than imagined!
         # https://engineering.atspotify.com/2014/02/28/how-to-shuffle-songs/
 
-        cycle_gen = itertools.cycle(array.array('i', (n for n in range(len(self.path_wrapper.audio_file_list)))))
+        cycle_gen = itertools.cycle(
+            array.array("i", (n for n in range(len(self.path_wrapper.audio_file_list))))
+        )
+
         for _ in range(self.currently_playing + 1):
             next(cycle_gen)
 
@@ -111,15 +121,23 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
 
         # -- Key binds
         self.audio_list.add_key_command(py_cui.keys.KEY_ENTER, self._play_cb_enter)
-        for widget in (self.audio_list, self.info_box, self.volume_slider, self.meta_list):
+        for widget in (
+            self.audio_list,
+            self.info_box,
+            self.volume_slider,
+            self.meta_list,
+        ):
             widget.add_key_command(py_cui.keys.KEY_SPACE, self._play_cb_space_bar)
 
         # -- Color rules
-        self.audio_list.add_text_color_rule(r"[0-9 ].*" + self.symbols["play"], py_cui.WHITE_ON_YELLOW, "contains")
-        self.audio_list.add_text_color_rule(r"[0-9 ].*" + self.symbols["pause"], py_cui.WHITE_ON_YELLOW, "contains")
-        self.audio_list.add_text_color_rule(r"[0-9 ].*" + self.symbols["stop"], py_cui.WHITE_ON_YELLOW, "contains")
-        self.audio_list.add_text_color_rule(r"DIR", py_cui.CYAN_ON_BLACK, "startswith", include_whitespace=False)
         self.info_box.add_text_color_rule("ERR:", py_cui.WHITE_ON_RED, "startswith")
+
+        self.audio_list.add_text_color_rule(self.symbols["play"], py_cui.WHITE_ON_YELLOW, "contains")
+        self.audio_list.add_text_color_rule(self.symbols["pause"], py_cui.WHITE_ON_YELLOW, "contains")
+        self.audio_list.add_text_color_rule(self.symbols["stop"], py_cui.WHITE_ON_YELLOW, "contains")
+        self.audio_list.add_text_color_rule(
+            r"DIR", py_cui.CYAN_ON_BLACK, "startswith", include_whitespace=False
+        )
 
         # -- State
         self.player_state: Type[PlayerStates] = AudioUnloaded
@@ -258,8 +276,9 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
 
         self.write_audio_list(itertools.chain(folder_gen(), audio_gen()))
         self.write_info(f"Found {len(self.path_wrapper.audio_file_list)} file(s).")
-        self.audio_list.set_title(f"Audio List - "
-                                  f"{len(self.path_wrapper.audio_file_list)} track(s)")
+        self.audio_list.set_title(
+            f"Audio List - " f"{len(self.path_wrapper.audio_file_list)} track(s)"
+        )
 
     def _update_meta(self):
         """
@@ -293,7 +312,9 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
             self.info_box.clear()
             # Sometimes you just want to unify interfaces.
 
-    def _write_to_scroll_widget(self, lines: Iterable, widget: py_cui.widgets.ScrollMenu, wrap_line=False):
+    def _write_to_scroll_widget(
+        self, lines: Iterable, widget: py_cui.widgets.ScrollMenu, wrap_line=False
+    ):
         """
         Internal function that handles writing on scroll widget.
 
@@ -306,6 +327,7 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
         _, usable_x = self.get_absolute_size(widget)
 
         if wrap_line:
+
             def wrapper_gen():
                 for source_line in lines:
                     yield from fit_to_actual_width_multiline(source_line, usable_x + offset)
@@ -346,7 +368,7 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
         source = self.audio_list.get_item_list()
         string = source[track_idx]
 
-        source[track_idx] = string[:self._digit] + replace_target + string[self._digit + 1:]
+        source[track_idx] = (string[: self._digit] + replace_target + string[self._digit + 1:])
         self.write_audio_list(source)
 
     def reset_marking(self, track_idx):
@@ -398,13 +420,23 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
         def show_progress(audio_info: AudioObject.AudioInfo, current_frame):
             # counting in some marginal errors of mismatching frames and total frames count.
 
-            file_name = title if (title := audio_info.title) else self.path_wrapper[self.currently_playing].name
+            file_name = audio_info.title
             max_frame = audio_info.total_frame
-            duration = audio_info.duration_tag
-            format_specifier = f"0{digit(duration)}.1f"
 
-            self.write_info(f"[{current_frame * duration / max_frame:{format_specifier}}/{duration}] "
-                            f"Playing now - {file_name}")
+            duration = audio_info.duration_tag
+            duration_digit = digit(duration)
+
+            format_specifier = f"0{duration_digit}.1f"
+            time_string = f"|{current_frame * duration / max_frame:{format_specifier}}/{duration}"
+
+            _, x_width = self.info_box.get_absolute_dimensions()
+
+            self.info_box.set_title(
+                f"{time_string}"
+                f"{gen_progress_bar(current_frame / max_frame, x_width - len(time_string) - 2)}"
+            )
+
+            self.write_info(f"Playing now - {file_name}")
 
         return show_progress
 
@@ -450,7 +482,7 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
         """
 
         return self.path_wrapper[self.selected_idx]
-        
+
     @contextmanager
     def maintain_current_view(self):
         """

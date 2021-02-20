@@ -1,7 +1,7 @@
 import functools
 import itertools
 from collections import OrderedDict
-from typing import Callable, Mapping, Generator, Iterator, Tuple
+from typing import Callable, Mapping, Generator, Iterator, Tuple, Sequence
 
 import py_cui
 from wcwidth import wcwidth, wcswidth
@@ -34,10 +34,6 @@ def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable, keypr
     setattr(widget_, "_handle_key_press", patch_factory(getattr(widget_, "_handle_key_press")))
     if not keypress_only:
         setattr(widget_, "_handle_mouse_press", patch_factory(getattr(widget_, "_handle_mouse_press")))
-
-
-def progress_bar_mimic(max_width, character_set=(" ",)):
-    pass
 
 
 def extract_meta(abs_file_dir):
@@ -169,3 +165,53 @@ def fit_to_actual_width_multiline(text: str, length_lim: int) -> Generator[str, 
             yield line
 
     return generator()
+
+
+def gen_progress_bar_wrapper(char_set: Tuple[str, str], fill_character: Sequence[str]):
+    """
+    Returns progress bar generator for Textbox title.
+    Do not expect to run with small space less than 3 character.
+
+    :param char_set: Sequence containing characters for start and end. Should be 1 width.
+    :param fill_character: Sequence containing characters to represent from 0 to N. N-digit system will be used.
+
+    """
+
+    start, end = char_set
+    digit_system = len(fill_character) - 1
+    fill_system = fill_character
+
+    def gen_progress_inner(value: float, width: int):
+        """
+        Create progress-bar string using value.
+
+        :param value: float ranging from 0 to 1
+        :param width: width of progress bar in characters
+
+        :return: progress bar string
+        """
+
+        width -= 2
+
+        def inner_gen():
+            value_factor = int(value * width * digit_system)
+
+            for n in range(width):
+                if value_factor == 0:
+                    yield fill_system[0]
+                else:
+                    try:
+                        yield fill_system[value_factor]
+                    except IndexError:
+                        yield fill_system[-1]
+
+                    value_factor -= digit_system
+                    if value_factor < 0:
+                        value_factor = 0
+
+        return start + "".join(inner_gen()) + end
+
+    return gen_progress_inner
+
+
+gen_progress_bar = gen_progress_bar_wrapper(("|", "|"), (" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"))
