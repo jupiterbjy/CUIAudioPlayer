@@ -50,45 +50,33 @@ def visualizer_closure(table, fill=True):
 
 def visualizer_closure_alt(table):
     conversion_table = table
-    rev_conversion_table = table[::-1]
     lim = len(conversion_table) - 1
+    quotient = 0
 
     def inner(data: Sequence) -> Iterator[str]:
+        nonlocal quotient
+
+        min_val = min(data)
+        min_idx = data.index(min_val)
+
+        if data[min_idx] < 0:
+            for quotient_ in itertools.count(1):
+                if quotient_ * lim > -min_val:
+                    quotient = quotient_
+                    break
+
         def string_gen(item: int):
-            if item >= 0:
-                while True:
-                    try:
-                        yield conversion_table[item]
-                    except IndexError:
-                        yield conversion_table[-1]
-                        item -= lim
-                    else:
-                        break
-            else:
-                item *= -1
-                while True:
-                    try:
-                        yield rev_conversion_table[item]
-                    except IndexError:
-                        yield rev_conversion_table[-1]
-                        item -= lim
-                    else:
-                        break
-
-        string_lines = ["".join(string_gen(n)) for n in data]
-
-        if min(data) < 0:
-            min_idx = data.index(min(data))
-            min_pad = len(string_lines[min_idx])
-
-            for (idx, line), neg in zip(
-                enumerate(string_lines), (val < 0 for val in data)
-            ):
-                if neg:
-                    string_lines[idx] = line.rjust(min_pad)
+            while item > 0:
+                try:
+                    yield conversion_table[item]
+                except IndexError:
+                    yield conversion_table[-1]
+                    item -= lim
                 else:
-                    string_lines[idx] = rev_conversion_table[0] * min_pad + line
+                    break
 
+        pad = quotient * lim
+        string_lines = ["".join(string_gen(n)) for n in (val + pad for val in data)]
         max_length = len(max(string_lines))
         length_normalized = (line.ljust(max_length) for line in string_lines)
 
@@ -137,6 +125,7 @@ class Main:
 
         # setup
         self._data = deque([], 40)
+        self.graph_alt.add_text_color_rule("-", py_cui.BLACK_ON_WHITE, "contains")
 
         for slider_widget in (self.slider_f, self.slider_y):
             slider_widget.toggle_border()
@@ -145,13 +134,9 @@ class Main:
             slider_widget.set_bar_char("█")
 
         # monkey patch draw
-        for graph_widget, visualizer in zip(
-            (self.graph, self.graph_alt, self.graph_dot),
-            (visualize, visualize_alt, visualize_dot),
-        ):
-            monkey_patch_loop(graph_widget, self.continuous_call_closure(graph_widget, visualizer))
+        monkey_patch_loop(self.graph, self.continuous_call_closure())
 
-    def continuous_call_closure(self, draw_target, visualizer_) -> Callable:
+    def continuous_call_closure(self) -> Callable:
 
         cycle_instance = itertools.cycle(
             range(self.slider_f_range["min_val"], self.slider_f_range["max_val"])
@@ -173,29 +158,14 @@ class Main:
                 self.graph_draw_alternative()
 
         return callback
-
     
     def graph_draw_standard(self):
-        draw_target = self.graph
-        visualizer = visualize
-        
-        data = [int(self.slider_y.get_slider_value() * n) for n in self._data]
-        min_ = min(data)
-
-        text = list(visualizer([n - min_ for n in data]))
-
-        text[-1] = f"{text[-1]} _ {min_}"
-
-        for line_idx in range(0, len(text) - 1):
-            text[line_idx] += f" _ {min_ + visualizer.num_per_ch * (len(text) - 1 - line_idx)}"
-
-        text.append("| " * (len(self._data) // 2))
-
-        draw_target.set_text("\n".join(text))
+        self._graph_draw_main(self.graph, visualize)
 
     def graph_draw_dot(self):
-        draw_target = self.graph_dot
-        visualizer = visualize_dot
+        self._graph_draw_main(self.graph_dot, visualize_dot)
+
+    def _graph_draw_main(self, draw_target: py_cui.widgets.ScrollTextBlock, visualizer: Callable):
 
         data = [int(self.slider_y.get_slider_value() * n) for n in self._data]
         min_ = min(data)
@@ -212,7 +182,33 @@ class Main:
         draw_target.set_text("\n".join(text))
 
     def graph_draw_alternative(self):
-        pass
+        draw_target = self.graph_alt
+        visualizer = visualize_alt
+        
+        data = [int(self.slider_y.get_slider_value() * n) for n in self._data]
+        min_ = min(data)
+
+        text = list(visualizer(data))
+        num_per_char = visualizer.num_per_ch
+
+        quotient = 0
+
+        for quotient_ in itertools.count(1):
+            if quotient_ * num_per_char > -min_:
+                quotient = quotient_
+                break
+
+        if not quotient:
+            for line_idx in range(0, len(text) - 1):
+                text[line_idx] += f" _ {min_ + num_per_char * (len(text) - 1 - line_idx)}"
+
+        else:
+            for idx, multiplier in zip(reversed(range(len(text))), range(-quotient, len(text))):
+                text[idx] += f"_ {multiplier * num_per_char}"
+
+        text.append("| " * (len(self._data) // 2))
+
+        draw_target.set_text("\n".join(text))
 
 
 if __name__ == "__main__":
