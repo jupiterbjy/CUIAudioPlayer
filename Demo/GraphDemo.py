@@ -22,25 +22,86 @@ def monkey_patch_loop(widget_: py_cui.widgets.Widget, callback: Callable):
     setattr(widget_, "_draw", patch_factory(getattr(widget_, "_draw")))
 
 
-def visualize(data: Sequence) -> Iterator[str]:
-    conversion_table = (" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█")
+def visualizer_closure(table, fill=True):
+    conversion_table = table
     lim = len(conversion_table) - 1
 
-    def string_gen(item: int):
-        while True:
-            try:
-                yield conversion_table[item]
-            except IndexError:
-                yield conversion_table[-1]
-                item -= lim
+    def inner(data: Sequence) -> Iterator[str]:
+        def string_gen(item: int):
+            while True:
+                try:
+                    yield conversion_table[item]
+                except IndexError:
+                    yield conversion_table[-1] if fill else conversion_table[0]
+                    item -= lim
+                else:
+                    break
+
+        string_lines = ["".join(string_gen(n)) for n in data]
+        max_length = max(map(len, string_lines))
+        length_normalized = (line.ljust(max_length) for line in string_lines)
+
+        return reversed(["".join(n) for n in zip(*length_normalized)])
+
+    inner.num_per_ch = len(table) - 1
+
+    return inner
+
+
+def visualizer_closure_alt(table):
+    conversion_table = table
+    rev_conversion_table = table[::-1]
+    lim = len(conversion_table) - 1
+
+    def inner(data: Sequence) -> Iterator[str]:
+        def string_gen(item: int):
+            if item >= 0:
+                while True:
+                    try:
+                        yield conversion_table[item]
+                    except IndexError:
+                        yield conversion_table[-1]
+                        item -= lim
+                    else:
+                        break
             else:
-                break
+                item *= -1
+                while True:
+                    try:
+                        yield rev_conversion_table[item]
+                    except IndexError:
+                        yield rev_conversion_table[-1]
+                        item -= lim
+                    else:
+                        break
 
-    string_lines = ["".join(string_gen(n)) for n in data]
-    max_length = len(max(string_lines))
-    length_normalized = (line.ljust(max_length) for line in string_lines)
+        string_lines = ["".join(string_gen(n)) for n in data]
 
-    return reversed(["".join(n) for n in zip(*length_normalized)])
+        if min(data) < 0:
+            min_idx = data.index(min(data))
+            min_pad = len(string_lines[min_idx])
+
+            for (idx, line), neg in zip(
+                enumerate(string_lines), (val < 0 for val in data)
+            ):
+                if neg:
+                    string_lines[idx] = line.rjust(min_pad)
+                else:
+                    string_lines[idx] = rev_conversion_table[0] * min_pad + line
+
+        max_length = len(max(string_lines))
+        length_normalized = (line.ljust(max_length) for line in string_lines)
+
+        return reversed(["".join(n) for n in zip(*length_normalized)])
+
+    inner.num_per_ch = len(table) - 1
+
+    return inner
+
+
+visualize = visualizer_closure((" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"))
+visualize_dot = visualizer_closure((" ", ".", "·", "˙"), fill=False)
+visualize_alt = visualizer_closure_alt((" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"))
 
 
 def double_sine_wave_gen():
@@ -61,9 +122,15 @@ class Main:
         self.slider_y_range = {"min_val": 1, "max_val": 20, "init_val": 15}
 
         # UI Def
-        self.slider_f = self.root.add_slider("Cycle per update", 2, 0, **self.slider_f_range)
-        self.slider_y = self.root.add_slider("Value multiplier", 2, 1, **self.slider_y_range)
-        self.graph = self.root.add_text_block("Graph", 0, 0, 2, 2)
+        self.slider_f = self.root.add_slider(
+            "Cycle per update", 4, 0, **self.slider_f_range
+        )
+        self.slider_y = self.root.add_slider(
+            "Value multiplier", 4, 1, **self.slider_y_range
+        )
+        self.graph = self.root.add_text_block("Graph", 0, 0, 2, 1)
+        self.graph_alt = self.root.add_text_block("Graph", 2, 0, 2, 1)
+        self.graph_dot = self.root.add_text_block("Graph", 0, 1, 4, 1)
 
         # generator instance
         self.data_stream = double_sine_wave_gen()
@@ -78,11 +145,17 @@ class Main:
             slider_widget.set_bar_char("█")
 
         # monkey patch draw
-        monkey_patch_loop(self.graph, self.continuous_call_closure())
+        for graph_widget, visualizer in zip(
+            (self.graph, self.graph_alt, self.graph_dot),
+            (visualize, visualize_alt, visualize_dot),
+        ):
+            monkey_patch_loop(graph_widget, self.continuous_call_closure(graph_widget, visualizer))
 
-    def continuous_call_closure(self) -> Callable:
+    def continuous_call_closure(self, draw_target, visualizer_) -> Callable:
 
-        cycle_instance = itertools.cycle(range(self.slider_f_range["min_val"], self.slider_f_range["max_val"]))
+        cycle_instance = itertools.cycle(
+            range(self.slider_f_range["min_val"], self.slider_f_range["max_val"])
+        )
 
         def check_update():
             return 0 == (next(cycle_instance) % self.slider_f.get_slider_value())
@@ -95,25 +168,55 @@ class Main:
             if check_update():
                 inject_new_data()
 
-                data = [int(self.slider_y.get_slider_value() * n) for n in self._data]
-                min_ = min(data)
-
-                text = list(visualize([n - min_ for n in data]))
-
-                text[-1] = f"{text[-1]} _ {min_}"
-
-                for line_idx in reversed(range(0, len(text) - 1)):
-                    text[line_idx] += f" _ {min_ + 8 * line_idx}"
-
-                text.append("| " * (len(self._data) // 2))
-
-                self.graph.set_text("\n".join(text))
+                self.graph_draw_standard()
+                self.graph_draw_dot()
+                self.graph_draw_alternative()
 
         return callback
 
+    
+    def graph_draw_standard(self):
+        draw_target = self.graph
+        visualizer = visualize
+        
+        data = [int(self.slider_y.get_slider_value() * n) for n in self._data]
+        min_ = min(data)
 
-if __name__ == '__main__':
-    root = py_cui.PyCUI(3, 2)
+        text = list(visualizer([n - min_ for n in data]))
+
+        text[-1] = f"{text[-1]} _ {min_}"
+
+        for line_idx in range(0, len(text) - 1):
+            text[line_idx] += f" _ {min_ + visualizer.num_per_ch * (len(text) - 1 - line_idx)}"
+
+        text.append("| " * (len(self._data) // 2))
+
+        draw_target.set_text("\n".join(text))
+
+    def graph_draw_dot(self):
+        draw_target = self.graph_dot
+        visualizer = visualize_dot
+
+        data = [int(self.slider_y.get_slider_value() * n) for n in self._data]
+        min_ = min(data)
+
+        text = list(visualizer([n - min_ for n in data]))
+
+        text[-1] = f"{text[-1]} _ {min_}"
+
+        for line_idx in range(0, len(text) - 1):
+            text[line_idx] += f" _ {min_ + visualizer.num_per_ch * (len(text) - 1 - line_idx)}"
+
+        text.append("| " * (len(self._data) // 2))
+
+        draw_target.set_text("\n".join(text))
+
+    def graph_draw_alternative(self):
+        pass
+
+
+if __name__ == "__main__":
+    root = py_cui.PyCUI(5, 2)
     ref = Main(root)
     root.set_widget_border_characters("╔", "╗", "╚", "╝", "═", "║")
     root.set_refresh_timeout(0.1)

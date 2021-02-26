@@ -428,7 +428,7 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
 
     def show_progress_wrapper(self, paused=False) -> Callable[[AudioObject.AudioInfo, int], None]:
         """
-        Wrapper for function that handles progress. Returning callable is meant to run in sounddevice callback.
+        Wrapper for function that handles progress. Returning callable that is meant to run in sounddevice callback.
 
         :param paused: if True, change message to display paused state.
 
