@@ -4,9 +4,9 @@
 
 Still under heavy development, expect tons of bugs.
 
-- Python 3.8 ~ 3.9
+- Python 3.8 ~ 3.9+
 - Requires ```master``` branch of [py_cui](https://github.com/jwlodek/py_cui)
-- Requires CMD on Windows, changing font may be necessary.
+- Requires CMD on Windows, changing font may be necessary depending on your codepage.
 
 *0.0.3a - dev*  
 ![](Demo/Images/Demo.webp)
@@ -93,16 +93,6 @@ I decided to create a repo utilizing both.
 Plus, this will be my first repo trying out git features such as milestones, issue, etc.
 
 ---
-## Status
-
-This impressive pre-stone-age program does:
-- refresh audio list
-- show *part* of metadata (No joke!)
-- Other checked stuff mentioned below.
-
-that's all.
-
----
 ## Planned features
 Will mark those if it's implemented.
 - [ ] Bare minimum audio player functions
@@ -112,11 +102,11 @@ Will mark those if it's implemented.
     - [x] library navigation
     - [x] show progress
     - [x] Continues play - works mostly.
-    - [ ] Shuffle
     - [x] Volume control (SW)
     - [x] Jump to section
     - [ ] Previous / Next track
     - [ ] mp3 / m4a support - might require pydub and conversion.
+- [ ] Shuffle
 - [ ] Album art visualizing on some sort of ascii art.
 - [ ] lrc support
 - [ ] Show freq. map
