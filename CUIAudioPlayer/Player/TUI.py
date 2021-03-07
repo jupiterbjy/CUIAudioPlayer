@@ -26,3 +26,11 @@ class AudioPlayerTUI:
 
         self.prev_btn = self._root.add_button("Reserved", 4, 3)
         self.next_btn = self._root.add_button("Next", 4, 4)
+
+        # Symbols for play state indicator
+        self.symbols = {"play": "⏵", "pause": "⏸", "stop": "⏹"}
+
+        # Theme changes
+        self.volume_slider.toggle_value()
+        self.volume_slider.align_to_bottom()
+        self.volume_slider.set_bar_char("█")

@@ -37,9 +37,6 @@ class PlayerLogicMixin:
     # Excl. Border, Spacing of widget from abs size.
     usable_offset_y, usable_offset_x = 2, 6
 
-    # Symbols for play state indicator
-    symbols = {"play": "⏵", "pause": "⏸", "stop": "⏹"}
-
     def _init_playlist(self: AudioPlayer):
         """
         Create itertools.cycle generator that acts as a playlist
@@ -112,12 +109,6 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
         # -- UI setup
         add_callback_patch(self.audio_list, self._on_file_click)
         add_callback_patch(self.volume_slider, self.volume_callback, keypress_only=True)
-
-        self.volume_slider.toggle_border()
-        self.volume_slider.toggle_title()
-        self.volume_slider.toggle_value()
-        self.volume_slider.align_to_bottom()
-        self.volume_slider.set_bar_char("█")
 
         # -- Key binds
         self.audio_list.add_key_command(py_cui.keys.KEY_ENTER, self._play_cb_enter)
