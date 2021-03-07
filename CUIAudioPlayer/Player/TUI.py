@@ -37,6 +37,6 @@ class AudioPlayerTUI:
 
         self.play_btn.set_color(py_cui.YELLOW_ON_BLACK)
         self.stop_btn.set_color(py_cui.YELLOW_ON_BLACK)
-        self.prev_btn.set_color(py_cui.ON)
+        self.prev_btn.set_color(py_cui.RED_ON_BLACK)
         self.next_btn.set_color(py_cui.GREEN_ON_BLACK)
 
