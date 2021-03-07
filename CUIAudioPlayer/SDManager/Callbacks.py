@@ -25,8 +25,9 @@ def stream_callback_closure(stream_manager: StreamManager, raw=False) -> Callabl
     cycle = itertools.cycle((not n for n in range(stream_manager.callback_minimum_cycle)))
 
     # to reduce load, custom callback will be called every n-th iteration of this generator.
+    # 3rd parameter is time but that is for internal use. Replacing with underscore.
 
-    def stream_cb(data_out, frames: int, time, status: sd.CallbackFlags) -> None:
+    def stream_cb(data_out, frames: int, _, status: sd.CallbackFlags) -> None:
         nonlocal last_frame, stream_manager
         assert not status
 
@@ -40,7 +41,12 @@ def stream_callback_closure(stream_manager: StreamManager, raw=False) -> Callabl
                 stream_manager.stop_flag = True
                 raise
 
-        if last_frame == (current_frame := audio_ref.tell()):
+        # if last_frame == (current_frame := audio_ref.tell()):
+        #     raise sd.CallbackAbort
+
+        current_frame = audio_ref.tell()
+
+        if last_frame == current_frame:
             raise sd.CallbackAbort
 
         last_frame = current_frame
@@ -50,7 +56,7 @@ def stream_callback_closure(stream_manager: StreamManager, raw=False) -> Callabl
             # Stream callback signature for user-supplied callbacks
             # Providing current_frame and duration to reduce call overhead from user-callback side.
 
-    def stream_cb_raw(data_out, frames: int, time, status: sd.CallbackFlags) -> None:
+    def stream_cb_raw(data_out, frames: int, _, status: sd.CallbackFlags) -> None:
         nonlocal last_frame
 
         try:
@@ -59,11 +65,22 @@ def stream_callback_closure(stream_manager: StreamManager, raw=False) -> Callabl
             logger.critical(str(status))
             raise
 
-        if (written := audio_ref.buffer_read_into(data_out, dtype)) < frames:
+        # if (written := audio_ref.buffer_read_into(data_out, dtype)) < frames:
+        #     data_out[written:] = [[0.0] * channel for _ in range(frames - written)]
+        #     raise sd.CallbackStop
+        #
+        # if last_frame == (current_frame := audio_ref.tell()):
+        #     raise sd.CallbackAbort
+
+        written = audio_ref.buffer_read_into(data_out, dtype)
+
+        if written < frames:
             data_out[written:] = [[0.0] * channel for _ in range(frames - written)]
             raise sd.CallbackStop
 
-        if last_frame == (current_frame := audio_ref.tell()):
+        current_frame = audio_ref.tell()
+
+        if last_frame == current_frame:
             raise sd.CallbackAbort
 
         last_frame = current_frame

@@ -57,8 +57,9 @@ class PlayerLogicMixin:
 
     def playlist_next(self: AudioPlayer):
         """
-        Separated logic from TUI
-        :return:
+        Get next track index to play.
+
+        :return: Index of next soundtrack on PathWrapper
         """
 
         try:
@@ -226,7 +227,7 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
         Callback for volume slider that adjust multiplier inside StreamManager.
         """
 
-        self.stream.multiplier = self.volume_slider.get_slider_value() / 4
+        self.stream.multiplier = self.volume_slider.get_slider_value() / 5
 
     def play_stream(self, audio_idx=None) -> int:
         """

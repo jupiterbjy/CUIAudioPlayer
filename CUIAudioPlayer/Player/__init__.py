@@ -7,8 +7,6 @@ import py_cui
 from wcwidth import wcwidth, wcswidth
 from tinytag import TinyTag
 
-from LoggingConfigurator import logger
-
 
 def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable, keypress_only=False):
     """
@@ -149,7 +147,13 @@ def fit_to_actual_width_multiline(text: str, length_lim: int) -> Generator[str, 
         next_line = ''
         line_size = length_lim
 
-        while line := "".join(itertools.islice(padded, 0, line_size)):
+        # while line := "".join(itertools.islice(padded, 0, line_size)):
+
+        while True:
+            line = "".join(itertools.islice(padded, 0, line_size))
+            if not line:
+                break
+
             # Add contents of next_line, then reset line length if next_line is not empty
             if next_line:
                 line = next_line + line
