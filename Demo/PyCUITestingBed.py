@@ -29,5 +29,5 @@ if __name__ == '__main__':
     root = py_cui.PyCUI(5, 5)
     ref = TestSubject(root)
 
-    # root.start()
+    root.start()
     # Forgot to use type hint, it would trigger pycharm to reveal all available attributes.

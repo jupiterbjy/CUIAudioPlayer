@@ -1,8 +1,11 @@
-import sounddevice as sd
-from typing import Callable, Type
+from __future__ import annotations
+from typing import TYPE_CHECKING, Callable, Type
+if TYPE_CHECKING:
+    from .AudioObject import AudioInfo
+    import sounddevice as sd
 
+from .StreamStates import StreamState, AudioUnloadedState
 from LoggingConfigurator import logger
-from .StreamStates import StreamState, AudioUnloadedState, AudioInfo
 
 
 class StreamManager:
@@ -19,10 +22,8 @@ class StreamManager:
         self.stream: sd.OutputStream = None
 
         self.multiplier = 1
-        self.volume_range = 0, 2
-        self.step = 0.25
         self.stream_state = AudioUnloadedState
-        self.error_flag = False
+        self.stop_flag = False
 
     def new_state(self, status: Type[StreamState]):
         logger.debug(f"Switching state: {self.stream_state} -> {status}")
@@ -32,38 +33,19 @@ class StreamManager:
         return self.stream_state.load_stream(self, audio_location)
 
     def start_stream(self):
+        self.stop_flag = False
         return self.stream_state.start_stream(self)
 
-    def stop_stream(self):
+    def stop_stream(self, run_finished_callback=True):
+        self.stop_flag = True if run_finished_callback else self.stop_flag
         return self.stream_state.stop_stream(self)
 
     def pause_stream(self):
+        self.stop_flag = not self.stop_flag
         return self.stream_state.pause_stream(self)
-
-    def volume_up(self):
-        if (n := self.multiplier + self.step) <= self.volume_range[1]:
-            self.multiplier = n
-
-    def volume_down(self):
-        if (n := self.multiplier - self.step) >= self.volume_range[0]:
-            self.multiplier = n
 
     def __del__(self):
         try:
             self.stream_state.stop_stream(self)
         except (RuntimeError, FileNotFoundError):
             pass
-
-
-if __name__ == '__main__':
-    def test():
-        from StreamManager import StreamManager
-        audio_location_1 = r"E:\github\CUIAudioPlayer\audio_files\short_sample_okayu_rejection.ogg"
-        audio_location_2 = r"E:\github\CUIAudioPlayer\audio_files\Higher's High   ナナヲアカリ.ogg"
-        ref = StreamManager()
-        ref.load_stream(audio_location_2)
-        ref.start_stream()
-
-        # Originally meant to hold doctest, but it was inconvenience to copy-pasting so remove it.
-
-    # Try this in python console. of course change the audio.

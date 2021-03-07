@@ -5,6 +5,8 @@ import inspect
 LOG_DETAILED_CALLER = True
 # This will log where the function is from.
 
+# TODO: either monkey-patch or use default settings of logging to use logging.getLogger on other sources.
+
 LOGGER = logging.getLogger("UI_DEBUG")
 
 if LOG_DETAILED_CALLER:
@@ -39,7 +41,10 @@ def get_caller_stack_and_association(depth=1):
                 continue
 
     actual_function_ref = get_reference_filter()
-    return actual_function_ref.__qualname__
+    try:
+        return actual_function_ref.__qualname__
+    except AttributeError:
+        return "<Module>"
 
 # https://stackoverflow.com/questions/52715425
 
