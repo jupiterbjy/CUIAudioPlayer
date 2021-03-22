@@ -515,4 +515,7 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
             self.audio_list._top_view = visible_idx
 
     def _tui_destroy_callback(self):
-        self.stream.stop_stream()
+        try:
+            self.stream.stop_stream()
+        except RuntimeError:
+            pass
