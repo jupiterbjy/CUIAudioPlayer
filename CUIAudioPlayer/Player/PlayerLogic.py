@@ -136,6 +136,7 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
 
         # -- State
         self.player_state: Type[PlayerStates] = AudioUnloaded
+        self.initial_volume_position = self.volume_slider.get_slider_value()
         self._digit: int = 0
 
         # -- Path and stream instance
@@ -227,7 +228,7 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
         Callback for volume slider that adjust multiplier inside StreamManager.
         """
 
-        self.stream.multiplier = self.volume_slider.get_slider_value() / 5
+        self.stream.multiplier = self.volume_slider.get_slider_value() / self.initial_volume_position
 
     def play_stream(self, audio_idx=None) -> int:
         """
