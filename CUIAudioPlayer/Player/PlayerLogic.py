@@ -110,6 +110,7 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
         # -- UI setup
         add_callback_patch(self.audio_list, self._on_file_click)
         add_callback_patch(self.volume_slider, self.volume_callback, keypress_only=True)
+        root.run_on_exit(self._tui_destroy_callback)
 
         # -- Key binds
         self.audio_list.add_key_command(py_cui.keys.KEY_ENTER, self._play_cb_enter)
@@ -462,7 +463,7 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
         Play next track. Called by finished callback of sounddevice when conditions are met.
         """
 
-        logger.debug(f"Condition: {self.stream.stop_flag}")
+        logger.debug(f"Proceed: {self.stream.stop_flag}")
 
         if not self.stream.stop_flag:
             next_ = self.playlist_next()
@@ -512,3 +513,6 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
         finally:
             self.audio_list.set_selected_item_index(current_idx)
             self.audio_list._top_view = visible_idx
+
+    def _tui_destroy_callback(self):
+        self.stream.stop_stream()
