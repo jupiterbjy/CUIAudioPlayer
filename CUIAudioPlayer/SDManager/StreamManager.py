@@ -10,6 +10,7 @@ from LoggingConfigurator import logger
 
 class StreamManager:
     def __init__(self, stream_callback: Callable = None, finished_callback: Callable = None, callback_every_n=2):
+
         self.callback_minimum_cycle = callback_every_n
 
         self.stream_cb = stream_callback if stream_callback else lambda audio_info, current_frame: None

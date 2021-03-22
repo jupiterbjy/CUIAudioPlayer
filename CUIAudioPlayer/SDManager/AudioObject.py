@@ -1,3 +1,4 @@
+import pathlib
 import soundfile as sf
 from tinytag import TinyTag
 
@@ -6,13 +7,13 @@ from LoggingConfigurator import logger
 
 class AudioInfo:
     def __init__(self, audio_dir: str):
-        self.audio_dir = audio_dir
-        self.loaded_data = sf.SoundFile(self.audio_dir)
+        self.audio_dir = pathlib.Path(audio_dir)
+        self.loaded_data = sf.SoundFile(self.audio_dir.as_posix())
 
         self.total_frame = self.loaded_data.frames
-        self.tag_data = TinyTag.get(self.audio_dir)
+        self.tag_data = TinyTag.get(self.audio_dir.as_posix())
 
-        self.title = self.tag_data.title
+        self.title = self.tag_data.title if self.tag_data.title else self.audio_dir.name
 
         # saving reference for tiny bit faster access
         try:
@@ -25,3 +26,4 @@ class AudioInfo:
 
     def __del__(self):
         self.loaded_data.close()
+        logger.debug(f"Dropping loaded file <{self.title}>")
