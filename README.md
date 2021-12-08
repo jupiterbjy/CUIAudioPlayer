@@ -1,14 +1,16 @@
 # CUI Audio Player
 
+![](Demo/Images/Demo.png)
+
 ---
 
-Still under heavy development, expect tons of bugs.
+Still under heavy(and slow) development, expect tons of bugs.
 
-- Python 3.8 ~ 3.9+
+- Python 3.9+
 - Requires ```master``` branch of [py_cui](https://github.com/jwlodek/py_cui)
 - Requires CMD on Windows, changing font may be necessary depending on your codepage.
 
-*0.0.3a - dev*  
+(a bit old demo) 
 ![](Demo/Images/Demo.webp)
 
 ---
@@ -104,14 +106,18 @@ Will mark those if it's implemented.
     - [x] Continues play - works mostly.
     - [x] Volume control (SW)
     - [x] Jump to section
-    - [ ] Previous / Next track
+    - [x] Next track
+    - [ ] Previous track
     - [ ] mp3 / m4a support - might require pydub and conversion.
-- [ ] Shuffle
-- [ ] Album art visualizing on some sort of ascii art.
-- [ ] lrc support
-- [ ] Show freq. map
-- [ ] favorites
-- [ ] Server - client stream
+
+Probably never list:
+  - [ ] Shuffle  
+~~ - [ ] Album art visualizing on some sort of ascii art. ~~ Can't get reasonable quality.
+  - [ ] lrc support
+  - [ ] Show freq. map
+  - [ ] favorites 
+  - [ ] Server - client stream
+  - [ ] Arguments
 
 ---
 ## Things to overcome / overcame

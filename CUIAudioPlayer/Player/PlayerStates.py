@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from LoggingConfigurator import logger
-from SDManager.StreamManager import StreamManager
+from SDManager.StreamManager import StreamManager, NoAudioPlayingError
 
 if TYPE_CHECKING:
     from .PlayerLogic import AudioPlayer
@@ -48,13 +48,17 @@ class PlayerStates:
 
         try:
             audio_player.stream.stop_stream()
-        except (RuntimeError, FileNotFoundError):
+        except (RuntimeError, FileNotFoundError, NoAudioPlayingError):
             return
 
         with audio_player.maintain_current_view():
             # revert texts
-            audio_player._refresh_list(search_files=False)
-            audio_player.mark_as_stopped(audio_player.currently_playing)
+            audio_player.refresh_list(search_files=False)
+            try:
+                audio_player.mark_as_stopped(audio_player.current_playing_idx)
+            except IndexError:
+                # playing audio is not in current dir, ignore
+                pass
             audio_player.write_info("")
 
         audio_player.player_state = AudioStopped
@@ -79,7 +83,7 @@ class PlayerStates:
             widget.clear()
 
         audio_player.stream = StreamManager(audio_player.show_progress_wrapper(), audio_player.play_next)
-        audio_player._refresh_list(search_files=True)
+        audio_player.refresh_list(search_files=True)
         audio_player.volume_callback()
 
         audio_player.player_state = AudioUnloaded
@@ -87,24 +91,26 @@ class PlayerStates:
     @staticmethod
     def on_audio_list_enter_press(audio_player: AudioPlayer):
         """
-        Enters directory if selected item is one of them. Else will stop current track and play selected track.
+        Enters if selected item is directory. Else will stop current track and play selected track.
         """
 
-        if audio_player.selected_idx_path in audio_player.path_wrapper.folder_list:
-            audio_player.path_wrapper.step_in(audio_player.selected_idx_path)
-            PlayerStates.on_reload_click(audio_player)
+        if audio_player.selected_idx_path.is_dir():
+            audio_player.path_wrapper.step_in(audio_player.selected_idx)
+            # PlayerStates.on_reload_click(audio_player)
+            audio_player.refresh_list(search_files=True)
         else:
             # force play audio
             with audio_player.maintain_current_view():
                 try:
                     audio_player.stream.stop_stream()
-                except RuntimeError as err:
-                    logger.warning(str(err))
-                except FileNotFoundError as err:
+                except (RuntimeError, FileNotFoundError, NoAudioPlayingError) as err:
                     logger.warning(str(err))
 
                 if audio_player.play_stream():
-                    audio_player.mark_as_playing(audio_player.currently_playing)
+                    try:
+                        audio_player.mark_as_playing(audio_player.current_playing_idx)
+                    except IndexError:
+                        pass
                     audio_player.player_state = AudioRunning
 
     @staticmethod
@@ -157,7 +163,10 @@ class AudioStopped(PlayerStates):
 
         with audio_player.maintain_current_view():
             audio_player.stream.start_stream()
-            audio_player.mark_as_playing(audio_player.currently_playing)
+            try:
+                audio_player.mark_as_playing(audio_player.current_playing_idx)
+            except IndexError:
+                pass
 
         audio_player.player_state = AudioRunning
 
@@ -190,7 +199,6 @@ class AudioRunning(PlayerStates):
         """
 
         audio_player.stream.stop_stream(run_finished_callback=False)
-        audio_player.player_state = AudioStopped
 
     @staticmethod
     def on_audio_list_space_press(audio_player: AudioPlayer):
@@ -200,7 +208,10 @@ class AudioRunning(PlayerStates):
 
         with audio_player.maintain_current_view():
             audio_player.stream.pause_stream()
-            audio_player.mark_as_paused(audio_player.currently_playing)
+            try:
+                audio_player.mark_as_paused(audio_player.current_playing_idx)
+            except IndexError:
+                pass
 
         audio_player.player_state = AudioPaused
 
@@ -250,7 +261,10 @@ class AudioPaused(PlayerStates):
 
         with audio_player.maintain_current_view():
             audio_player.stream.pause_stream()
-            audio_player.mark_as_playing(audio_player.currently_playing)
+            try:
+                audio_player.mark_as_playing(audio_player.current_playing_idx)
+            except IndexError:
+                pass
 
         audio_player.player_state = AudioRunning
 

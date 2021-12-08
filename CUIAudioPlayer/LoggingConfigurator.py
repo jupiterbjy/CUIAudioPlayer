@@ -1,6 +1,9 @@
 import logging
 import inspect
 
+from loguru import logger
+assert logger
+# all below are now deprecated
 
 LOG_DETAILED_CALLER = True
 # This will log where the function is from.
@@ -23,6 +26,7 @@ if not LOGGER.handlers:
 def get_caller_stack_name(depth=1):
     """
     Gets the name of caller.
+
     :param depth: determine which scope to inspect, for nested usage.
     """
     return inspect.stack()[depth][3]
@@ -94,7 +98,8 @@ class CallerLoggedLogger:
         return inner
 
 
-logger = CallerLoggedLogger()
+# logger = CallerLoggedLogger()
+
 
 # def logging_decorator(func):
 #     async def inner()

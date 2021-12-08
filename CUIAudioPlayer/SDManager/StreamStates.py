@@ -14,6 +14,10 @@ Finite-State Machine implementation, idea from Python Cookbook 3E.
 """
 
 
+class NoAudioPlayingError(Exception):
+    pass
+
+
 class StreamState:
     @staticmethod
     def start_stream(stream_manager: StreamManager):
@@ -39,11 +43,11 @@ class AudioUnloadedState(StreamState):
 
     @staticmethod
     def stop_stream(stream_manager: StreamManager):
-        raise FileNotFoundError("No audio file is loaded.")
+        raise NoAudioPlayingError("No audio file is loaded.")
 
     @staticmethod
     def pause_stream(stream_manager: StreamManager):
-        raise FileNotFoundError("No audio file is loaded.")
+        raise NoAudioPlayingError("No audio file is loaded.")
 
     @staticmethod
     def load_stream(stream_manager: StreamManager, audio_dir: str):
@@ -68,12 +72,12 @@ class AudioUnloadedState(StreamState):
 class StreamStoppedState(StreamState):
     @staticmethod
     def stop_stream(stream_manager: StreamManager):
-        raise RuntimeError("Stream is not active.")
+        raise NoAudioPlayingError("Stream is not active.")
 
     @staticmethod
     def pause_stream(stream_manager: StreamManager):
         stream_manager.stream.stop()
-        raise RuntimeError("Stream is not active.")
+        raise NoAudioPlayingError("Stream is not active.")
 
     @staticmethod
     def start_stream(stream_manager: StreamManager):
@@ -89,7 +93,7 @@ class StreamStoppedState(StreamState):
     @staticmethod
     def load_stream(stream_manager: StreamManager, audio_dir: str):
         logger.debug("Loading new file.")
-        logger.debug("Delegating to: StreamPlayingState.stop_stream")
+        logger.debug("Delegating to: StreamPlayingState.load_stream")
         AudioUnloadedState.load_stream(stream_manager, audio_dir)
 
 
@@ -118,6 +122,7 @@ class StreamPlayingState(StreamState):
         logger.debug("Stopping and loading new audio.")
         logger.debug("Delegating to: StreamPlayingState.stop_stream")
         StreamPlayingState.stop_stream(stream_manager)
+        logger.debug("Delegating to: AudioUnloadedState.load_stream")
         AudioUnloadedState.load_stream(stream_manager, audio_dir)
 
 
@@ -142,4 +147,5 @@ class StreamPausedState(StreamState):
         logger.debug("Stopping and loading new audio.")
         logger.debug("Delegating to: StreamPlayingState.stop_stream")
         StreamPlayingState.stop_stream(stream_manager)
+        logger.debug("Delegating to: AudioUnloadedState.load_stream")
         AudioUnloadedState.load_stream(stream_manager, audio_dir)

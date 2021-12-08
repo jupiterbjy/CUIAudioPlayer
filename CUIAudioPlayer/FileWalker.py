@@ -17,7 +17,7 @@ else:
 # TODO: separate audio related logic from pathwrapper via subclass
 class PathWrapper:
     primary_formats = set("." + key.lower() for key in sf.available_formats().keys())
-    secondary_formats = {".m4a", ".mp3"} if PY_DUB_ENABLED else {}
+    secondary_formats = {".m4a", ".mp3"} if PY_DUB_ENABLED else set()
     supported_formats = primary_formats | secondary_formats
     supported_formats = supported_formats | set(key.upper() for key in supported_formats)
 
@@ -33,42 +33,43 @@ class PathWrapper:
         self.folder_list: List[pathlib.Path] = []
 
     def list_audio(self) -> Generator[pathlib.Path, None, None]:
-        return (path_obj for path_obj in self.list_file() if path_obj.suffix in self.supported_formats)
+        yield from (path_obj for path_obj in self.list_file() if path_obj.suffix in self.supported_formats)
 
     def list_folder(self) -> Generator[pathlib.Path, None, None]:
         """
         First element will be current folder location. either use next() or list()[1:] to skip it.
         """
 
-        def generator():
-            yield self.current_path.parent
-            for item in self.current_path.glob("*/"):
-                if item.is_dir():
-                    yield item
-
-        return generator()
+        yield self.current_path.parent
+        yield from (path_ for path_ in self.current_path.iterdir() if path_.is_dir())
 
     def list_file(self) -> Generator[pathlib.Path, None, None]:
         """
         Can't use glob as it match folders such as .git, using pathlib.Path object instead.
         """
 
-        return (item for item in self.current_path.glob("*/") if item.is_file())
+        yield from (item for item in self.current_path.iterdir() if item.is_file())
 
-    def step_in(self, directory: Union[str, pathlib.Path]):
+    def step_in(self, directory_idx: int):
         """
         Relative / Absolute paths supported.
         """
 
-        self.current_path = self.current_path.joinpath(directory)
+        try:
+            self.current_path = self.folder_list[directory_idx]
+        except IndexError as err:
+            raise NotADirectoryError(f"Directory index {directory_idx} does not exist!") from err
+
         self.refresh_list()
         return self.current_path
 
-    def step_out(self, depth=1):
-        if depth <= 0:
+    def step_out(self):
+
+        if self.current_path == self.current_path.parent:
             return self.current_path
 
-        self.current_path = self.current_path.parents[depth - 1]
+        self.current_path = self.current_path.parent
+
         self.refresh_list()
         return self.current_path
 
@@ -81,18 +82,12 @@ class PathWrapper:
 
     def fetch_meta(self):
         # This might have to deal the cases such as path changing before generator fires up.
-        def generator():
-            for file_dir in self.list_audio():
-                yield TinyTag.get(file_dir)
-
-        return generator()
+        for file_dir in self.list_audio():
+            yield TinyTag.get(file_dir)
 
     def fetch_tag_data(self):
-        def generator():
-            for file_dir in self.list_audio():
-                yield TinyTag.get(file_dir)
-
-        return generator()
+        for file_dir in self.list_audio():
+            yield TinyTag.get(file_dir)
 
     def __len__(self):
         return len(self.folder_list) + len(self.audio_file_list)
@@ -108,9 +103,9 @@ class PathWrapper:
             return self.audio_file_list[item - len(self.folder_list)]
 
     def index(self, target: Union[str, pathlib.Path]):
+        path_ = pathlib.Path(target)
         try:
-            return len(self.folder_list) + self.audio_file_list.index(target)
-        except ValueError:
-            # assuming it's pure string directory.
-            path_converted = pathlib.Path(target)
-            return len(self.folder_list) + self.audio_file_list.index(path_converted)
+            return len(self.folder_list) + self.audio_file_list.index(path_)
+        except ValueError as err:
+            raise IndexError(f"Cannot find given target '{path_.as_posix()}'!") from err
+

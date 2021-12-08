@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     from .AudioObject import AudioInfo
     import sounddevice as sd
 
-from .StreamStates import StreamState, AudioUnloadedState
+from .StreamStates import StreamState, AudioUnloadedState, NoAudioPlayingError
 from LoggingConfigurator import logger
 
 
@@ -48,5 +48,5 @@ class StreamManager:
     def __del__(self):
         try:
             self.stream_state.stop_stream(self)
-        except (RuntimeError, FileNotFoundError):
+        except (RuntimeError, FileNotFoundError, NoAudioPlayingError):
             pass

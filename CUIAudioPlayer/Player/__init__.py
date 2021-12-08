@@ -12,13 +12,14 @@ def add_callback_patch(widget_: py_cui.widgets.Widget, callback: Callable, keypr
     """
     Adding callback support for widget that lacks such as ScrollMenu.
 
-    :param widget_: Any widget you want to add callback on each input events.
-    :param callback: Any callables
-    :param keypress_only: Decides whether to replace mouse input handler alongside with key input one.
+    Args:
+        widget_: Any widget you want to add callback on each input events.
+        callback: Any callables
+        keypress_only: Decides whether to replace mouse input handler alongside with key input one.
     """
 
     # Sequence is _draw -> _handle_mouse_press, so patching on _draw results 1 update behind.
-    # Therefore we need to patch both _handle_mouse_press and _handle_keyboard_press.
+    # Therefore, we need to patch both _handle_mouse_press and _handle_keyboard_press.
 
     def patch_factory(old_func):
         # fix for late binding issue: stackoverflow.com/questions/3431676
@@ -109,7 +110,7 @@ def fit_to_actual_width(text: str, length_lim: int) -> str:
         limited = source[:length_lim]
 
         # if last character was 2-width, padding unicode wore off, so last 2-width character can't fit.
-        # instead pad with space for consistent ellipsis position.
+        # instead, pad with space for consistent ellipsis position.
         if wcwidth(limited[-1]) == 2:
             limited = limited[:-1] + " "
     else:

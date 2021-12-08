@@ -4,17 +4,16 @@ Combined logic with TUI and PlayerLogixMixin.
 
 from __future__ import annotations
 
-import array
 import itertools
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Iterable, Callable, Type, Tuple
+from typing import TYPE_CHECKING, Iterable, Callable, Type, Tuple, Union
 
 import py_cui
 from FileWalker import PathWrapper
-from SDManager.StreamManager import StreamManager
+from SDManager.StreamManager import StreamManager, NoAudioPlayingError
 from LoggingConfigurator import logger
 from .TUI import AudioPlayerTUI
-from .PlayerStates import PlayerStates, AudioUnloaded
+from .PlayerStates import PlayerStates, AudioUnloaded, AudioRunning
 from . import (
     add_callback_patch,
     fit_to_actual_width,
@@ -37,23 +36,23 @@ class PlayerLogicMixin:
     # Excl. Border, Spacing of widget from abs size.
     usable_offset_y, usable_offset_x = 2, 6
 
-    def _init_playlist(self: AudioPlayer):
+    def init_playlist(self: AudioPlayer):
         """
         Create itertools.cycle generator that acts as a playlist
         """
 
         # Shuffling is harder than imagined!
         # https://engineering.atspotify.com/2014/02/28/how-to-shuffle-songs/
-
+        copy = [i for i in self.path_wrapper.audio_file_list]
         cycle_gen = itertools.cycle(
-            array.array("i", (n for n in range(len(self.path_wrapper.audio_file_list))))
+            copy
         )
 
-        for _ in range(self.currently_playing + 1):
-            next(cycle_gen)
+        while next(cycle_gen) != self.current_playing_file:
+            pass
 
         self._current_play_generator = cycle_gen
-        logger.debug("Initialized playlist generator.")
+        logger.debug(f"Initialized playlist generator from directory '{self.path_wrapper.current_path.as_posix()}'")
 
     def playlist_next(self: AudioPlayer):
         """
@@ -62,13 +61,11 @@ class PlayerLogicMixin:
         :return: Index of next soundtrack on PathWrapper
         """
 
-        try:
-            return next(self._current_play_generator)
-        except TypeError:
-            self._init_playlist()
-            return next(self._current_play_generator)
+        return next(self._current_play_generator)
 
-    def get_absolute_size(self: AudioPlayer, widget: py_cui.widgets.Widget) -> Tuple[int, int]:
+    def get_absolute_size(
+        self: AudioPlayer, widget: py_cui.widgets.Widget
+    ) -> Tuple[int, int]:
         """
         Get absolute dimensions of widget including borders.
 
@@ -80,15 +77,14 @@ class PlayerLogicMixin:
         return abs_y - self.usable_offset_y, abs_x - self.usable_offset_x
 
     @property
-    def currently_playing(self: AudioPlayer) -> int:
+    def current_playing_idx(self: AudioPlayer) -> int:
         """
-        Returns index of currently played track. Currently using slow method for simplicity.
+        Returns index of currently played track.
 
         :return: index of played file
         """
 
-        file_name = self.stream.audio_info.loaded_data.name
-        return self.path_wrapper.index(file_name)
+        return self.path_wrapper.index(self.current_playing_file)
 
 
 class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
@@ -114,7 +110,9 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
 
         # -- Key binds
         self.audio_list.add_key_command(py_cui.keys.KEY_ENTER, self._play_cb_enter)
-        self.volume_slider.add_key_command(py_cui.keys.KEY_SPACE, self._play_cb_space_bar)
+        self.volume_slider.add_key_command(
+            py_cui.keys.KEY_SPACE, self._play_cb_space_bar
+        )
 
         for widget in (
             self.audio_list,
@@ -122,15 +120,25 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
             self.meta_list,
         ):
             widget.add_key_command(py_cui.keys.KEY_SPACE, self._play_cb_space_bar)
-            widget.add_key_command(py_cui.keys.KEY_LEFT_ARROW, self._adjust_playback_left)
-            widget.add_key_command(py_cui.keys.KEY_RIGHT_ARROW, self._adjust_playback_right)
+            widget.add_key_command(
+                py_cui.keys.KEY_LEFT_ARROW, self._adjust_playback_left
+            )
+            widget.add_key_command(
+                py_cui.keys.KEY_RIGHT_ARROW, self._adjust_playback_right
+            )
 
         # -- Color rules
         self.info_box.add_text_color_rule("ERR:", py_cui.WHITE_ON_RED, "startswith")
 
-        self.audio_list.add_text_color_rule(self.symbols["play"], py_cui.WHITE_ON_YELLOW, "contains")
-        self.audio_list.add_text_color_rule(self.symbols["pause"], py_cui.WHITE_ON_YELLOW, "contains")
-        self.audio_list.add_text_color_rule(self.symbols["stop"], py_cui.WHITE_ON_YELLOW, "contains")
+        self.audio_list.add_text_color_rule(
+            self.symbols["play"], py_cui.WHITE_ON_YELLOW, "contains"
+        )
+        self.audio_list.add_text_color_rule(
+            self.symbols["pause"], py_cui.WHITE_ON_YELLOW, "contains"
+        )
+        self.audio_list.add_text_color_rule(
+            self.symbols["stop"], py_cui.WHITE_ON_YELLOW, "contains"
+        )
         self.audio_list.add_text_color_rule(
             r"DIR", py_cui.CYAN_ON_BLACK, "startswith", include_whitespace=False
         )
@@ -138,11 +146,14 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
         # -- State
         self.player_state: Type[PlayerStates] = AudioUnloaded
         self.initial_volume_position = self.volume_slider.get_slider_value()
+        self.global_volume_multiplier = 0.4
         self._digit: int = 0
 
         # -- Path and stream instance
         self.stream = StreamManager(self.show_progress_wrapper(), self.play_next)
+        self.volume_callback()
         self.path_wrapper = PathWrapper()
+        self.current_playing_file: Union[pathlib.Path, None] = None
 
         # -- Generator instance and states
         self._current_play_generator = None
@@ -229,22 +240,25 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
         Callback for volume slider that adjust multiplier inside StreamManager.
         """
 
-        self.stream.multiplier = self.volume_slider.get_slider_value() / self.initial_volume_position
+        self.stream.multiplier = self.global_volume_multiplier * (
+            self.volume_slider.get_slider_value() / self.initial_volume_position
+        )
 
-    def play_stream(self, audio_idx=None) -> int:
+    def play_stream(self, audio_file: Union[None, pathlib.Path] = None, next_=False) -> int:
         """
         Load audio and starts audio stream. Returns True if successful.
 
-        :param audio_idx: If not None, will play given index of track instead
+        :param audio_file: If not None, will play given index of track instead
+        :param next_: Used to not refresh playlist when playing next.
         """
 
-        if not audio_idx:
-            audio_idx = self.selected_idx
+        if not audio_file:
+            audio_file = self.selected_idx_path
 
         try:
-            self.stream.load_stream(self.path_wrapper[audio_idx])
+            self.stream.load_stream(audio_file)
         except IndexError:
-            logger.debug(f"Invalid idx: {audio_idx} / {len(self.path_wrapper)}")
+            logger.debug(f"Invalid idx: {audio_file} / {len(self.path_wrapper)}")
             return False
 
         except RuntimeError as err:
@@ -253,15 +267,18 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
             self.write_info(msg)
             return False
 
-        self._refresh_list(search_files=False)
+        self.current_playing_file = audio_file
+        self.refresh_list(search_files=False)
         self.stream.start_stream()
-        self._init_playlist()
+
+        if not next_:
+            self.init_playlist()
 
         return True
 
     # End of primary callback
 
-    def _refresh_list(self, search_files=True):
+    def refresh_list(self, search_files=True):
         """
         Refresh directory contents. If search_files is True, will also update cached files list.
         Will separate this after changing list generating method to use internal item list of ScrollWidget.
@@ -319,7 +336,9 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
 
         if text:
             # Will have hard time to implement cycling texts.
-            fit_text = fit_to_actual_width(str(text), self.get_absolute_size(self.info_box)[-1])
+            fit_text = fit_to_actual_width(
+                str(text), self.get_absolute_size(self.info_box)[-1]
+            )
             self.info_box.set_text(fit_text)
         else:
             self.info_box.clear()
@@ -343,7 +362,9 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
 
             def wrapper_gen():
                 for source_line in lines:
-                    yield from fit_to_actual_width_multiline(source_line, usable_x + offset)
+                    yield from fit_to_actual_width_multiline(
+                        source_line, usable_x + offset
+                    )
 
             for line in wrapper_gen():
                 widget.add_item(line)
@@ -381,7 +402,9 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
         source = self.audio_list.get_item_list()
         string = source[track_idx]
 
-        source[track_idx] = (string[: self._digit] + replace_target + string[self._digit + 1:])
+        source[track_idx] = (
+            string[: self._digit] + replace_target + string[self._digit + 1:]
+        )
         self.write_audio_list(source)
 
     def reset_marking(self, track_idx):
@@ -420,7 +443,9 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
 
         self._mark_target(track_idx, self.symbols["stop"])
 
-    def show_progress_wrapper(self, paused=False) -> Callable[[AudioObject.AudioInfo, int], None]:
+    def show_progress_wrapper(
+        self, paused=False
+    ) -> Callable[[AudioObject.AudioInfo, int], None]:
         """
         Wrapper for function that handles progress. Returning callable that is meant to run in sounddevice callback.
 
@@ -443,7 +468,9 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
             duration_digit = digit(duration)
 
             format_specifier = f"0{duration_digit}.1f"
-            time_string = f"|{current_frame * duration / max_frame:{format_specifier}}/{duration}"
+            time_string = (
+                f"|{current_frame * duration / max_frame:{format_specifier}}/{duration}"
+            )
 
             _, x_width = self.info_box.get_absolute_dimensions()
 
@@ -463,7 +490,7 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
         Play next track. Called by finished callback of sounddevice when conditions are met.
         """
 
-        logger.debug(f"Proceed: {self.stream.stop_flag}")
+        logger.debug(f"Stop Flag: {self.stream.stop_flag}")
 
         if not self.stream.stop_flag:
             next_ = self.playlist_next()
@@ -471,11 +498,19 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
             logger.debug(f"Playing Next - {next_}")
 
             with self.maintain_current_view():
-                if not self.play_stream(next_):
+                if not self.play_stream(next_, True):
+                    # TODO: add mark_as_error
+                    # TODO: add total player length with playlist gen so it can find infinite fail loop
                     logger.warning("Error playing next track. Moving on.")
                     self.play_next()
                 else:
-                    self.mark_as_playing(self.currently_playing)
+                    # update state
+                    self.player_state = AudioRunning
+                    logger.debug(f"Next track started, state: {self.player_state}")
+                    try:
+                        self.mark_as_playing(self.current_playing_idx)
+                    except IndexError:
+                        pass
 
     # Helper functions -----------------------------------------
 
@@ -517,5 +552,5 @@ class AudioPlayer(AudioPlayerTUI, PlayerLogicMixin):
     def _tui_destroy_callback(self):
         try:
             self.stream.stop_stream()
-        except RuntimeError:
+        except (RuntimeError, NoAudioPlayingError):
             pass
